@@ -111,25 +111,56 @@ def submit_course(client, course, jxb, sub_ids=None):
     )
 
 
-def init_client(log=print):
-    """CDP cookie -> 会话 -> 页面上下文。返回 (client, ws)。"""
-    ws = get_cdp_ws_url()
-    cookies = cdp_get_cookies(ws)
-    session = build_session(cookies)
-    if not check_alive(session):
-        raise RuntimeError("会话失效，请重新登录教务并刷新页面")
+def init_client(log=print, spawn=True, login_wait=120):
+    """CDP cookie -> 会话 -> 页面上下文。返回 (client, ws)。
+
+    spawn=True 时：检测不到调试实例则自动拉起托管 Chrome（独立 profile），
+    并等待用户登录（最多 login_wait 秒）。
+    """
+    ws = None
+    try:
+        ws = get_cdp_ws_url()
+    except RuntimeError:
+        ws = None
+    if ws is None and spawn:
+        log("[+] 未检测到调试实例，自动启动托管 Chrome...")
+        ws = spawn_chrome(JW_INDEX)
+        log(f"[+] 已打开 Chrome 窗口，请在其中登录教务并打开选课页")
+        deadline = time.time() + login_wait
+        last_progress = 0
+        while True:
+            try:
+                cookies = cdp_get_cookies(ws)
+                session = build_session(cookies)
+                if check_alive(session):
+                    log(f"[+] 登录态已确认")
+                    break
+            except Exception:
+                pass
+            left = int(deadline - time.time())
+            if left <= 0:
+                raise RuntimeError("等待登录超时，请重新运行")
+            if time.time() - last_progress > 10:
+                last_progress = time.time()
+                log(f"    等待登录中... 剩余 {left}s")
+            time.sleep(2)
+    elif ws is not None:
+        cookies = cdp_get_cookies(ws)
+        session = build_session(cookies)
+        if not check_alive(session):
+            raise RuntimeError("会话失效，请重新登录教务并刷新页面")
     client = JWClient(session)
     if not client._h("rwlx"):
-        client.cdp_refresh_hidden(ws)
+        client.cdp_refresh_hidden(get_cdp_ws_url())
     return client, ws
 
 
 def run_grab(keywords, kklxdms=("10", "11"), interval=1.5, timeout=1800,
              class_idx=None, try_complex=False, dry_run=False,
-             log=print, stop_event=None):
+             log=print, stop_event=None, spawn=True, login_wait=120):
     """完整抢课流程。可用 stop_event(threading.Event) 中途停止。"""
     log(f"[{now()}] 初始化会话...")
-    client, _ = init_client(log)
+    client, _ = init_client(log, spawn=spawn, login_wait=login_wait)
     log(f"[{now()}] 拉取全表: 类别 {list(kklxdms)}")
     snapshot = fetch_full_snapshot(client, kklxdms, log)
 
@@ -224,12 +255,15 @@ def main():
     ap.add_argument("--class-idx", type=int)
     ap.add_argument("--try-complex", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-spawn", action="store_true",
+                    help="不自动启动托管 Chrome（需手动开调试实例）")
     args = ap.parse_args()
 
     kklxdms = [s.strip() for s in args.kklxdm.split(",") if s.strip()]
     run_grab(args.keywords, kklxdms=kklxdms, interval=args.interval,
              timeout=args.timeout, class_idx=args.class_idx,
-             try_complex=args.try_complex, dry_run=args.dry_run)
+             try_complex=args.try_complex, dry_run=args.dry_run,
+             spawn=not args.no_spawn)
 
 
 if __name__ == "__main__":

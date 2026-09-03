@@ -17,7 +17,9 @@ CDP 自动拉 cookie + 直打接口。
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 import urllib.request
 
 import requests
@@ -41,6 +43,70 @@ CDP_PORT_FILE = os.path.join(
     os.environ.get("USERPROFILE") or os.path.expanduser("~"),
     "AppData", "Local", "Google", "Chrome", "User Data", "DevToolsActivePort",
 )
+
+# 托管 Chrome 实例的独立 profile（与用户日常 Chrome 隔离）
+MANAGED_PROFILE = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+    "jwglxt-auto", "chrome-profile",
+)
+
+
+def find_chrome() -> str:
+    """定位 chrome.exe（常见安装路径）。"""
+    cands = [
+        os.environ.get("PROGRAMFILES", "") + r"\Google\Chrome\Application\chrome.exe",
+        os.environ.get("PROGRAMFILES(X86)", "") + r"\Google\Chrome\Application\chrome.exe",
+        os.environ.get("LOCALAPPDATA", "") + r"\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    ]
+    for c in cands:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def wait_devtools(profile_dir: str, timeout: float = 25.0):
+    """轮询 profile 目录的 DevToolsActivePort，返回 ws 地址。"""
+    port_file = os.path.join(profile_dir, "DevToolsActivePort")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with open(port_file, "r", encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            if len(lines) >= 2:
+                return f"ws://{DEBUG_HOST}:{lines[0]}{lines[1]}"
+        except Exception:
+            pass
+        time.sleep(0.4)
+    return None
+
+
+def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
+    """启动托管 Chrome（独立 profile + 随机调试端口），返回 ws 地址。
+
+    - 若该 profile 已有实例运行，直接复用（登录态保留）
+    - 不影响用户日常 Chrome
+    """
+    chrome = find_chrome()
+    if not chrome:
+        raise RuntimeError("未找到 Chrome，请先安装")
+    os.makedirs(profile_dir, exist_ok=True)
+    ws_url = wait_devtools(profile_dir, timeout=3)
+    if ws_url:                      # 已在运行，复用
+        return ws_url
+    cmd = [chrome,
+           f"--user-data-dir={profile_dir}",
+           "--remote-debugging-port=0",   # 随机端口，写进 DevToolsActivePort
+           "--no-first-run",
+           "--no-default-browser-check",
+           "--restore-last-session=false"]
+    if url:
+        cmd.append(url)
+    subprocess.Popen(cmd)
+    ws_url = wait_devtools(profile_dir, timeout=30)
+    if not ws_url:
+        raise RuntimeError("Chrome 启动超时（30s）")
+    return ws_url
 
 
 def get_cdp_ws_url() -> str:

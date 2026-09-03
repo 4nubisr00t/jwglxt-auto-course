@@ -50,6 +50,7 @@ class App(ctk.CTk):
         self.stop_evt = None
         self.log_q = queue.Queue()
         self._running = False
+        self._running_connect = False
 
         self._build()
         self.after(100, self._drain_log)
@@ -211,28 +212,28 @@ class App(ctk.CTk):
 
     # ---------------- 会话 ----------------
     def connect(self):
-        self._log("CDP cookie 注入 → 会话构建 → 页面上下文解析...")
+        if self._running_connect:
+            return
+        self._running_connect = True
+        self.btn_conn.configure(state="disabled")
+        self._status("连接中", WARN)
+        threading.Thread(target=self._connect_worker, daemon=True).start()
+
+    def _connect_worker(self):
         try:
-            cookies = cdp_get_cookies(get_cdp_ws_url())
-            session = build_session(cookies)
-            if not check_alive(session):
-                self._log("会话失效：请确认教务已登录且页面打开", "err")
-                self._status("会话失效", ERR)
-                return
-            self.client = JWClient(session)
-            if not self.client._h("rwlx"):
-                self.client.cdp_refresh_hidden(get_cdp_ws_url())
-            if not self.client._h("rwlx"):
-                self._log(f"提示: 请确认浏览器中打开了选课页面 "
-                          f"({JW_BASE}/xsxk/zzxkyzb_cxZzxkYzbIndex.html)", "warn")
+            self._log("检测调试实例，必要时自动启动托管 Chrome...")
+            self.client, _ = grab.init_client(spawn=True, log=self._log)
             self._log(f"连接成功: tabs={list(self.client.tabs)} "
                       f"rwlx={self.client._h('rwlx') or '?'} "
                       f"xklc={self.client._h('xklc') or '?'}", "ok")
-            self._status("已连接", OK)
             self.btn_start.configure(state="normal")
+            self._status("已连接", OK)
         except Exception as e:
             self._log(f"连接失败: {e}", "err")
             self._status("连接失败", ERR)
+        finally:
+            self._running_connect = False
+            self.btn_conn.configure(state="normal")
 
     def crawl(self):
         if not self.client:
