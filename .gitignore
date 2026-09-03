@@ -3,3 +3,6 @@ __pycache__/
 data/
 js-snapshot/
 INTERFACES.md
+build/
+dist/
+*.spec

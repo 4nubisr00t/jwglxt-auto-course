@@ -6,40 +6,50 @@
 
 ## 功能
 
-- **会话复用**：通过 Chrome DevTools 协议从你的浏览器实时读取登录会话，
-  无需手动维护 cookie
+- **会话复用**：通过 Chrome DevTools 协议从你的浏览器实时读取登录会话，无需手动维护 cookie
 - **课程检索**：单次请求获取当前学期的全部可选课程，按关键词匹配目标
 - **已选查重**：提交前自动过滤已选课程（只做加法，不做减法）
-- **抢课循环**：实时获取操作参数 → 自动选班 → 提交 → 按返回状态分类处理，
-  支持轮询间隔、超时控制、预演模式
-- **图形界面**：内置 GUI，双击启动，无需命令行
+- **抢课循环**：实时获取操作参数 → 自动选班 → 提交 → 按返回状态分类处理，支持轮询间隔、超时控制、预演模式
+- **图形界面**：内置 GUI（customtkinter），打包为 exe 后可双击开界面
 
-## 环境要求
+## 快速开始（三选一）
 
-- Windows / Chrome（需以远程调试模式启动，见下方命令）
-- Python 3.10+，`pip install -r requirements.txt`
+### A. 直接下载 exe（无需安装 Python）
 
-Chrome 远程调试（已运行的 Chrome 需先完全退出）：
+1. 从 Releases 下载 `jwglxt-gui.exe`（图形版）或 `jwglxt-cli.exe`（命令行版）
+2. Chrome 以远程调试模式启动（已运行需先完全退出）：
 
 ```powershell
 chrome.exe --remote-debugging-port=9222 `
   --user-data-dir="C:\Users\<你的用户名>\AppData\Local\Google\Chrome\User Data"
 ```
 
-启动后登录教务系统，打开选课页面。
+3. 登录教务系统，打开选课页面
+4. 双击 `jwglxt-gui.exe` 操作，或命令行 `jwglxt-cli.exe "关键词"`
 
-## 使用
+### B. 源码运行
 
 ```bash
-# 图形界面（推荐）
-python gui.pyw
-
-# 命令行
-python grab.py "关键词" --dry-run     # 预演：只匹配查重，不提交
-python grab.py "关键词"               # 正式执行
+pip install -r requirements.txt
+python gui_app.py              # 图形界面
+python grab.py "关键词" --dry-run   # 命令行（预演）
 ```
 
-常用参数：
+### C. 自己打包 exe
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --name jwglxt-cli grab.py
+pyinstaller --onefile --windowed --name jwglxt-gui --collect-data customtkinter gui_app.py
+```
+
+## 界面操作流程
+
+`连接浏览器` → 按提示确认选课页已打开 → `抓取全表` → 输入关键词、
+勾选类别、调参数（预演模式默认开启，确认无误后取消勾选）→ `开始`。
+日志面板实时显示进程，`停止` 可在本轮结束后退出。
+
+## 常用参数
 
 | 参数 | 说明 |
 |---|---|
@@ -54,7 +64,7 @@ python grab.py "关键词"               # 正式执行
 ```
 jw_cdp_client.py    # 会话复用 + 接口封装（库）
 grab.py             # 核心逻辑（CLI + GUI 共用）
-gui.pyw             # 图形界面
+gui_app.py          # 图形界面（customtkinter）
 crawl_all.py        # 课程全表抓取 → data/ 快照
 test_submit.py      # 提交链路最小验证
 test_submit3.py     # 提交链路完整验证（含前后对比，零减法检查）
