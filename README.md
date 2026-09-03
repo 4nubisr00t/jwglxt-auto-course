@@ -17,15 +17,10 @@
 ### A. 直接下载 exe（无需安装 Python）
 
 1. 从 Releases 下载 `jwglxt-gui.exe`（图形版）或 `jwglxt-cli.exe`（命令行版）
-2. Chrome 以远程调试模式启动（已运行需先完全退出）：
-
-```powershell
-chrome.exe --remote-debugging-port=9222 `
-  --user-data-dir="C:\Users\<你的用户名>\AppData\Local\Google\Chrome\User Data"
-```
-
-3. 登录教务系统，打开选课页面
-4. 双击 `jwglxt-gui.exe` 操作，或命令行 `jwglxt-cli.exe "关键词"`
+2. 运行 exe，点击「连接浏览器」
+3. 程序会自动拉起一个独立的 Chrome 窗口（不影响你日常使用的 Chrome），
+   在窗口中登录教务系统并打开选课页即可
+4. 程序检测到登录态后自动继续，输入关键词开始选课
 
 ### B. 源码运行
 
@@ -45,8 +40,9 @@ pyinstaller --onefile --windowed --name jwglxt-gui --collect-data customtkinter 
 
 ## 界面操作流程
 
-`连接浏览器` → 按提示确认选课页已打开 → `抓取全表` → 输入关键词、
-勾选类别、调参数（预演模式默认开启，确认无误后取消勾选）→ `开始`。
+「连接浏览器」→ 程序自动拉起独立 Chrome 并等待登录（或复用已有的托管实例，
+登录态保留）→ 检测成功后状态变绿 → 抓取全表 → 输入关键词、
+勾选类别、调参数（预演模式默认开启，确认无误后取消勾选）→ 开始。
 日志面板实时显示进程，`停止` 可在本轮结束后退出。
 
 ## 常用参数
