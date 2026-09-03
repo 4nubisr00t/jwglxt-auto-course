@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+data/
+js-snapshot/
+INTERFACES.md
