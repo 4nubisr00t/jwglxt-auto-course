@@ -225,14 +225,14 @@ class App(ctk.CTk):
         """二次元卡片：顶部粉色发光条 + 左侧小图标 + 右侧装饰星"""
         outer = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=16,
                              border_width=1, border_color=LINE)
-        outer.pack(fill="x", pady=(0, 12))
+        outer.pack(fill="x", pady=(0, 8))
         # 顶部发光条
         glow = ctk.CTkFrame(outer, fg_color=ACCENT, height=2, corner_radius=0,
                             width=1)
-        glow.pack(fill="x", padx=12, pady=(8, 0))
+        glow.pack(fill="x", padx=12, pady=(5, 0))
         # 标题行
         head = ctk.CTkFrame(outer, fg_color="transparent")
-        head.pack(fill="x", padx=14, pady=(4, 2))
+        head.pack(fill="x", padx=14, pady=(3, 2))
         ctk.CTkLabel(head, text=icon, text_color=ACCENT,
                      font=ctk.CTkFont(size=13, weight="bold")
                      ).pack(side="left")
@@ -255,7 +255,7 @@ class App(ctk.CTk):
                           corner_radius=11,
                           text_color=TEXT if not color else "#2a1020",
                           font=ctk.CTkFont(family=TAG_FONT, size=12))
-        b.pack(fill="x", padx=12, pady=4)
+        b.pack(fill="x", padx=12, pady=3)
         return b
 
     def _build(self):
@@ -293,7 +293,7 @@ class App(ctk.CTk):
         # 左栏（浮于夜空之上）
         left = ctk.CTkFrame(self, fg_color=CARD, corner_radius=16,
                             border_width=1, border_color=LINE, height=1)
-        left.place(relx=0.023, rely=0.13, relwidth=0.345, relheight=0.85)
+        left.place(relx=0.023, rely=0.125, relwidth=0.345, relheight=0.865)
 
         c1 = self._card(left, "会话", "✧")
         self.btn_conn = self._btn(c1, "连接浏览器", self.connect, ACCENT, 36)
@@ -308,26 +308,17 @@ class App(ctk.CTk):
                      font=ctk.CTkFont(family=TAG_FONT, size=11)
                      ).pack(anchor="w", padx=12, pady=(2, 2))
         self.kw = ctk.CTkEntry(c2, placeholder_text="例如: 敦煌 光影 算法",
-                               height=36, fg_color=CARD2, border_color=LINE,
+                               height=32, fg_color=CARD2, border_color=LINE,
                                text_color=TEXT)
         self.kw.pack(fill="x", padx=12, pady=(0, 6))
         self.cat = {"10": True, "11": True, "01": False}
-        self.cat_btns = {}
-        row = ctk.CTkFrame(c2, fg_color="transparent")
-        row.pack(fill="x", padx=12, pady=(0, 6))
-        for k, name in (("10", "通识选修"), ("11", "特殊课程"), ("01", "主修")):
-            b = ctk.CTkButton(row, text=name, width=92, height=32,
-                              fg_color="#3d2440" if self.cat[k] else CARD3,
-                              text_color=ACCENT if self.cat[k] else DIM,
-                              border_width=2 if self.cat[k] else 1,
-                              border_color=ACCENT if self.cat[k] else LINE,
-                              hover_color="#4a2a45", corner_radius=17,
-                              font=ctk.CTkFont(family=TAG_FONT, size=12,
-                                               weight="bold" if self.cat[k]
-                                               else "normal"),
-                              command=lambda kk=k: self._toggle_cat(kk))
-            b.pack(side="left", padx=(0, 8))
-            self.cat_btns[k] = b
+        self.cat_names = {"10": "通识选修", "11": "特殊课程", "01": "主修"}
+        self.cat_icons = {"10": "❀", "11": "✦", "01": "♛"}
+        # 彩绘描边选项卡（canvas 绘制，带樱花底纹）
+        self.cat_cv = tk.Canvas(c2, height=42, bg=CARD, highlightthickness=0)
+        self.cat_cv.pack(fill="x", padx=12, pady=(0, 6))
+        self.cat_cv.bind("<Button-1>", self._on_cat_click)
+        self.after(120, self._draw_cat_tabs)
 
         c3 = self._card(left, "参数", "◇")
         pr = ctk.CTkFrame(c3, fg_color="transparent")
@@ -353,7 +344,7 @@ class App(ctk.CTk):
                                     fg_color=CARD3, button_color=ACCENT,
                                     button_hover_color="#ff94bf",
                                     font=ctk.CTkFont(family=TAG_FONT, size=12))
-        self.dry_sw.pack(anchor="w", padx=14, pady=(8, 2))
+        self.dry_sw.pack(anchor="w", padx=14, pady=(6, 2))
         self.dry_sw.select()
         self.cpx_sw = ctk.CTkSwitch(c3, text="尝试组合实践班",
                                     progress_color=ACCENT,
@@ -361,9 +352,9 @@ class App(ctk.CTk):
                                     fg_color=CARD3, button_color=ACCENT,
                                     button_hover_color="#ff94bf",
                                     font=ctk.CTkFont(family=TAG_FONT, size=12))
-        self.cpx_sw.pack(anchor="w", padx=14, pady=(0, 8))
+        self.cpx_sw.pack(anchor="w", padx=14, pady=(0, 6))
 
-        self.btn_start = ctk.CTkButton(left, text="开  始", height=46,
+        self.btn_start = ctk.CTkButton(left, text="开  始", height=44,
                                        fg_color=ACCENT, hover_color="#ff94bf",
                                        corner_radius=13,
                                        border_width=2, border_color="#ffd7e8",
@@ -372,7 +363,7 @@ class App(ctk.CTk):
                                        command=self.start)
         self.btn_start.pack(fill="x", padx=14, pady=(4, 6))
         self.btn_start.configure(state="disabled")
-        self.btn_stop = ctk.CTkButton(left, text="停  止", height=38,
+        self.btn_stop = ctk.CTkButton(left, text="停  止", height=36,
                                       fg_color="transparent",
                                       hover_color="#3a2440", border_width=1,
                                       border_color=ERR, text_color=ERR,
@@ -411,16 +402,70 @@ class App(ctk.CTk):
         if w > 10 and h > 10:
             self._sky.init(w, h)
 
-    def _toggle_cat(self, k):
-        self.cat[k] = not self.cat[k]
-        on = self.cat[k]
-        self.cat_btns[k].configure(
-            fg_color="#3d2440" if on else CARD3,
-            text_color=ACCENT if on else DIM,
-            border_width=2 if on else 1,
-            border_color=ACCENT if on else LINE,
-            font=ctk.CTkFont(family=TAG_FONT, size=12,
-                             weight="bold" if on else "normal"))
+    # ---------------- 彩绘选项卡（canvas） ----------------
+    def _round_rect(self, cv, x0, y0, x1, y1, r, **kw):
+        pts = [x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1,
+               x1 - r, y1, x0 + r, y1, x0, y1, x0, y1 - r, x0, y0 + r, x0, y0]
+        return cv.create_polygon(pts, smooth=True, **kw)
+
+    def _paint_tab_motif(self, cv, x0, y0, x1, y1):
+        """选中态底纹：右上角樱花瓣 + 左下角星光（描边彩绘感）"""
+        cx = x0 + (x1 - x0) * 0.80
+        cy = y0 + (y1 - y0) * 0.30
+        for ang, s in [(0, 3.4), (72, 2.8), (144, 3.1), (216, 2.5), (288, 2.9)]:
+            px = cx + s * 0.95 * math.cos(math.radians(ang))
+            py = cy + s * 0.62 * math.sin(math.radians(ang))
+            cv.create_oval(px - 2.5, py - 1.9, px + 2.5, py + 1.9,
+                           fill="#ff77a9", outline="#ffb3d1", width=1)
+        cv.create_oval(cx - 1.3, cy - 1.3, cx + 1.3, cy + 1.3, fill="#ffe9f2")
+        sx = x0 + (x1 - x0) * 0.18
+        sy = y0 + (y1 - y0) * 0.80
+        cv.create_polygon(sx, sy - 4, sx + 1.6, sy - 1.6, sx + 4, sy,
+                          sx + 1.6, sy + 1.6, sx, sy + 4, sx - 1.6, sy + 1.6,
+                          sx - 4, sy, sx - 1.6, sy - 1.6,
+                          fill="#b388ff", outline="#cfc4ff")
+
+    def _draw_cat_tabs(self):
+        cv = self.cat_cv
+        cv.delete("all")
+        w = cv.winfo_width()
+        h = cv.winfo_height()
+        if w < 40 or h < 20:
+            self.after(100, self._draw_cat_tabs)
+            return
+        n = len(self.cat_names)
+        gap = 8
+        tw = (w - gap * (n - 1)) / n
+        self.cat_geo = []
+        for i, (k, name) in enumerate(self.cat_names.items()):
+            x0 = i * (tw + gap)
+            y0 = 2
+            x1 = x0 + tw
+            y1 = h - 2
+            on = self.cat[k]
+            bg = "#3d2440" if on else CARD3
+            bd = ACCENT if on else LINE
+            self._round_rect(cv, x0, y0, x1, y1, 17, fill=bg, outline=bd,
+                             width=2 if on else 1)
+            if on:
+                self._paint_tab_motif(cv, x0, y0, x1, y1)
+            cx = (x0 + x1) / 2
+            cy = (y0 + y1) / 2
+            cv.create_text(cx, cy - 7, text=self.cat_icons[k],
+                           fill=ACCENT if on else ACCENT2,
+                           font=("Microsoft YaHei UI", 11))
+            cv.create_text(cx, cy + 9, text=name,
+                           fill=ACCENT if on else DIM,
+                           font=("Microsoft YaHei UI", 9,
+                                 "bold" if on else "normal"))
+            self.cat_geo.append((x0, y0, x1, y1, k))
+
+    def _on_cat_click(self, ev):
+        for x0, y0, x1, y1, k in getattr(self, "cat_geo", []):
+            if x0 <= ev.x <= x1 and y0 <= ev.y <= y1:
+                self.cat[k] = not self.cat[k]
+                self._draw_cat_tabs()
+                return
 
     # ---------------- 日志 ----------------
     def _log(self, text, level="info"):
