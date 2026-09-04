@@ -1,3 +1,4 @@
 requests
 websocket-client
 customtkinter
+pillow
