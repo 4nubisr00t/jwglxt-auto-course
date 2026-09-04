@@ -2,7 +2,11 @@
 """验证: DevToolsActivePort -> CDP Storage.getCookies 链路"""
 import json
 import os
+import sys
 import websocket
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from jw_cdp_client import DOMAIN_FILTER
 
 PORT_FILE = os.path.join(
     os.environ.get("USERPROFILE") or os.path.expanduser("~"),

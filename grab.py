@@ -18,7 +18,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
-                           check_alive, JWClient)
+                           check_alive, JWClient, spawn_chrome, JW_INDEX)
 
 BIG_PAGE = 100000          # 大分页一次拉全
 SUCCESS_FLAGS = ("1", "3", "6")
