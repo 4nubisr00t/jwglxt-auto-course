@@ -221,22 +221,39 @@ class App(ctk.CTk):
             self.after(60, self._sky.tick)
 
     # ---------------- UI ----------------
-    def _card(self, parent, title, icon="◆"):
-        f = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=14,
-                         border_width=1, border_color=LINE)
-        f.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(f, text=f"{icon} {title}", text_color=ACCENT2,
+    def _card(self, parent, title, icon="✦"):
+        """二次元卡片：顶部粉色发光条 + 左侧小图标 + 右侧装饰星"""
+        outer = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=16,
+                             border_width=1, border_color=LINE)
+        outer.pack(fill="x", pady=(0, 12))
+        # 顶部发光条
+        glow = ctk.CTkFrame(outer, fg_color=ACCENT, height=2, corner_radius=0,
+                            width=1)
+        glow.pack(fill="x", padx=12, pady=(8, 0))
+        # 标题行
+        head = ctk.CTkFrame(outer, fg_color="transparent")
+        head.pack(fill="x", padx=14, pady=(4, 2))
+        ctk.CTkLabel(head, text=icon, text_color=ACCENT,
+                     font=ctk.CTkFont(size=13, weight="bold")
+                     ).pack(side="left")
+        ctk.CTkLabel(head, text=f"  {title}  ", text_color=ACCENT2,
                      font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold")
-                     ).pack(anchor="w", padx=14, pady=(10, 4))
-        return f
+                     ).pack(side="left")
+        ctk.CTkLabel(head, text="✦ · ✦", text_color="#3d3560",
+                     font=ctk.CTkFont(size=10)
+                     ).pack(side="right")
+        return outer
 
-    def _btn(self, parent, text, cmd, color=None, height=34, ghost=False):
+    def _btn(self, parent, text, cmd, color=None, height=34, ghost=False,
+             border=None):
         fg = color or CARD3
         hv = "#3d315c"
         b = ctk.CTkButton(parent, text=text, command=cmd, height=height,
                           fg_color=fg, hover_color=hv,
-                          border_width=0, corner_radius=9,
-                          text_color=TEXT,
+                          border_width=1 if border else 0,
+                          border_color=border or LINE,
+                          corner_radius=11,
+                          text_color=TEXT if not color else "#2a1020",
                           font=ctk.CTkFont(family=TAG_FONT, size=12))
         b.pack(fill="x", padx=12, pady=4)
         return b
@@ -248,20 +265,30 @@ class App(ctk.CTk):
 
         # 顶部标题栏
         head = ctk.CTkFrame(self, fg_color=CARD, corner_radius=0,
-                            border_width=0, height=58)
+                            border_width=0, height=62)
         head.place(relx=0.02, rely=0.02, relwidth=0.96)
         ctk.CTkLabel(head, text="✦", text_color=ACCENT,
-                     font=ctk.CTkFont(size=20, weight="bold")
-                     ).place(relx=0.02, rely=0.5, anchor="w")
-        ctk.CTkLabel(head, text="JWGLXT AUTO", text_color=TEXT,
-                     font=ctk.CTkFont(family=TAG_FONT, size=17, weight="bold")
-                     ).place(relx=0.06, rely=0.5, anchor="w")
-        ctk.CTkLabel(head, text="— 教务选课自动化 —", text_color=DIM,
+                     font=ctk.CTkFont(size=22, weight="bold")
+                     ).place(relx=0.018, rely=0.5, anchor="w")
+        ctk.CTkLabel(head, text="JWGLXT", text_color=TEXT,
+                     font=ctk.CTkFont(family=TAG_FONT, size=18, weight="bold")
+                     ).place(relx=0.055, rely=0.5, anchor="w")
+        ctk.CTkLabel(head, text="AUTO", text_color=ACCENT,
+                     font=ctk.CTkFont(family=TAG_FONT, size=18, weight="bold")
+                     ).place(relx=0.205, rely=0.5, anchor="w")
+        ctk.CTkLabel(head, text="— ✦ 教务选课自动化 ✦ —", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=12)
-                     ).place(relx=0.27, rely=0.5, anchor="w")
+                     ).place(relx=0.40, rely=0.5, anchor="center")
         self.status_lbl = ctk.CTkLabel(head, text="○ 未连接", text_color=DIM,
                                        font=ctk.CTkFont(family=TAG_FONT, size=13))
-        self.status_lbl.place(relx=0.98, rely=0.5, anchor="e")
+        self.status_lbl.place(relx=0.945, rely=0.5, anchor="e")
+        ctk.CTkLabel(head, text="★", text_color=ACCENT2,
+                     font=ctk.CTkFont(size=12)).place(relx=0.975, rely=0.5,
+                                                      anchor="e")
+        # 标题栏底部发光细线
+        lline = ctk.CTkFrame(head, fg_color=ACCENT, height=2, width=1,
+                             corner_radius=0)
+        lline.place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
 
         # 左栏（浮于夜空之上）
         left = ctk.CTkFrame(self, fg_color=CARD, corner_radius=16,
@@ -289,12 +316,15 @@ class App(ctk.CTk):
         row = ctk.CTkFrame(c2, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(0, 6))
         for k, name in (("10", "通识选修"), ("11", "特殊课程"), ("01", "主修")):
-            b = ctk.CTkButton(row, text=name, width=88, height=30,
-                              fg_color=CARD3 if not self.cat[k] else "#3d2440",
-                              text_color=DIM if not self.cat[k] else ACCENT,
-                              border_width=1, border_color=LINE,
-                              hover_color="#3d315c", corner_radius=15,
-                              font=ctk.CTkFont(family=TAG_FONT, size=12),
+            b = ctk.CTkButton(row, text=name, width=92, height=32,
+                              fg_color="#3d2440" if self.cat[k] else CARD3,
+                              text_color=ACCENT if self.cat[k] else DIM,
+                              border_width=2 if self.cat[k] else 1,
+                              border_color=ACCENT if self.cat[k] else LINE,
+                              hover_color="#4a2a45", corner_radius=17,
+                              font=ctk.CTkFont(family=TAG_FONT, size=12,
+                                               weight="bold" if self.cat[k]
+                                               else "normal"),
                               command=lambda kk=k: self._toggle_cat(kk))
             b.pack(side="left", padx=(0, 8))
             self.cat_btns[k] = b
@@ -305,29 +335,38 @@ class App(ctk.CTk):
         ctk.CTkLabel(pr, text="轮询间隔(s)", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.interval = ctk.CTkEntry(pr, width=60, height=30, fg_color=CARD2,
-                                     border_color=LINE, text_color=TEXT)
+                                     border_color=ACCENT2, text_color=TEXT,
+                                     corner_radius=9)
         self.interval.insert(0, "1.5")
         self.interval.pack(side="left", padx=(6, 18))
         ctk.CTkLabel(pr, text="超时(s)", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.timeout = ctk.CTkEntry(pr, width=80, height=30, fg_color=CARD2,
-                                    border_color=LINE, text_color=TEXT)
+                                    border_color=ACCENT2, text_color=TEXT,
+                                    corner_radius=9)
         self.timeout.insert(0, "1800")
         self.timeout.pack(side="left", padx=6)
 
         self.dry_sw = ctk.CTkSwitch(c3, text="预演模式（只匹配不出手）",
                                     progress_color=ACCENT,
+                                    border_width=1, border_color=LINE,
+                                    fg_color=CARD3, button_color=ACCENT,
+                                    button_hover_color="#ff94bf",
                                     font=ctk.CTkFont(family=TAG_FONT, size=12))
         self.dry_sw.pack(anchor="w", padx=14, pady=(8, 2))
         self.dry_sw.select()
         self.cpx_sw = ctk.CTkSwitch(c3, text="尝试组合实践班",
                                     progress_color=ACCENT,
+                                    border_width=1, border_color=LINE,
+                                    fg_color=CARD3, button_color=ACCENT,
+                                    button_hover_color="#ff94bf",
                                     font=ctk.CTkFont(family=TAG_FONT, size=12))
         self.cpx_sw.pack(anchor="w", padx=14, pady=(0, 8))
 
         self.btn_start = ctk.CTkButton(left, text="开  始", height=46,
                                        fg_color=ACCENT, hover_color="#ff94bf",
-                                       corner_radius=12,
+                                       corner_radius=13,
+                                       border_width=2, border_color="#ffd7e8",
                                        font=ctk.CTkFont(family=TAG_FONT, size=16,
                                                         weight="bold"),
                                        command=self.start)
@@ -353,6 +392,8 @@ class App(ctk.CTk):
         for tag, color in LV_COLOR.items():
             self.log_box.tag_config(tag, foreground=color)
         self.log_box.tag_config("t", foreground="#6a6390")
+        self.log_box.insert("end",
+                            "✧· ─────── ✦ 课 程 结 界 启 动 ✦ ─────── ·✧\n", "t")
         self._log("✦ 欢迎回来，主人。先「连接浏览器」，再「抓取全表」，"
                   "最后输入关键词，开始狙击心仪的课程吧。")
 
@@ -373,8 +414,13 @@ class App(ctk.CTk):
     def _toggle_cat(self, k):
         self.cat[k] = not self.cat[k]
         on = self.cat[k]
-        self.cat_btns[k].configure(fg_color="#3d2440" if on else CARD3,
-                                   text_color=ACCENT if on else DIM)
+        self.cat_btns[k].configure(
+            fg_color="#3d2440" if on else CARD3,
+            text_color=ACCENT if on else DIM,
+            border_width=2 if on else 1,
+            border_color=ACCENT if on else LINE,
+            font=ctk.CTkFont(family=TAG_FONT, size=12,
+                             weight="bold" if on else "normal"))
 
     # ---------------- 日志 ----------------
     def _log(self, text, level="info"):
