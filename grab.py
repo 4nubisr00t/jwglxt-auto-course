@@ -204,14 +204,16 @@ def init_client(log=print, spawn=True, login_wait=300):
         if not check_alive(session):
             raise RuntimeError("会话失效，请重新登录教务并刷新页面")
     client = JWClient(session)
+    # 注意：rwlx/xklc 只在 display 页参数里（JWClient._h 无参时会回退 tab_hidden）
     if not client._h("rwlx"):
         client.cdp_refresh_hidden(ws)
     if not client._h("rwlx"):
-        # 浏览器里没有打开选课页：自动新建标签打开选课页，等页面就绪后重读 DOM
-        log("[!] 未检测到已打开的选课页，自动打开教务选课页...")
+        # 浏览器里没有可读的选课页参数：唤起/复用选课页（不重复新建 tab），
+        # 等页面就绪后从 DOM 重读。
+        log("[!] 未检测到已打开的选课页，自动唤起教务选课页...")
         for attempt in range(3):
             try:
-                open_page_via_cdp(ws, JW_INDEX)
+                open_page_via_cdp(ws, JW_INDEX, reuse=True)
             except Exception as e:
                 log(f"    打开选课页失败: {e}")
                 break

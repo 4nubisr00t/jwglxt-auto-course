@@ -177,15 +177,79 @@ def get_cdp_ws_url() -> str:
         ) from e
 
 
+def get_managed_cdp_ws_url() -> str:
+    """定位当前实际在跑的托管 Chrome 调试端点。
+
+    顺序：1) 托管 profile（jwglxt-auto/chrome-profile）的 DevToolsActivePort
+         2) 默认 Chrome profile 的 DevToolsActivePort
+         3) 9222 标准发现端点
+    托管 Chrome 用独立 profile，get_cdp_ws_url() 只查默认 profile 会永远
+    找不到托管实例（verify 报 10061 的根因）。
+    """
+    candidates = [MANAGED_PROFILE, CDP_PORT_FILE]
+    for port_file in candidates:
+        try:
+            with open(port_file, "r", encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            if len(lines) < 2:
+                continue
+            ws_url = f"ws://{DEBUG_HOST}:{lines[0]}{lines[1]}"
+            if _port_alive(ws_url):
+                return ws_url
+        except Exception:
+            continue
+    url = f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/version"
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(url, timeout=3) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        ws = data.get("webSocketDebuggerUrl")
+        if not ws:
+            raise RuntimeError("9222 有响应但不是 DevTools 端点（可能被别的程序占用）")
+        return ws
+    except Exception as e:
+        raise RuntimeError(
+            f"Chrome DevTools 连不上 ({e})。\n"
+            "托管 Chrome 未在运行，或调试端口不可达。请先点「连接教务」"
+            "（会自动拉起托管 Chrome）再验证。"
+        ) from e
+
+
+
 def open_page_via_cdp(ws_url: str, url: str) -> str:
-    """通过 CDP 在浏览器新建标签页并导航到 url，返回 targetId。"""
+    """通过 CDP 打开 url 对应页面，返回 targetId。
+    reuse=True 时：若已存在 JW 域选课页签则仅聚焦（activateTarget），
+    不再新建，避免重复打开多个选课页标签（上次失败重试堆出 3 个 tab 的根因）。
+    """
+    host = JW_HOST
+    mid = 0
     ws = websocket.create_connection(ws_url, timeout=10, suppress_origin=True)
     try:
-        ws.send(json.dumps({"id": 1, "method": "Target.createTarget",
+        if reuse:
+            mid += 1
+            ws.send(json.dumps({"id": mid, "method": "Target.getTargets"}))
+            while True:
+                msg = json.loads(ws.recv())
+                if msg.get("id") == mid:
+                    existing = [t for t in msg["result"]["targetInfos"]
+                                if t.get("type") == "page" and host in t.get("url", "")]
+                    if existing:
+                        target_id = existing[0]["targetId"]
+                        mid += 1
+                        ws.send(json.dumps({"id": mid, "method": "Target.activateTarget",
+                                            "params": {"targetId": target_id}}))
+                        while True:
+                            r = json.loads(ws.recv())
+                            if r.get("id") == mid:
+                                break
+                        return target_id
+                    break
+        mid += 1
+        ws.send(json.dumps({"id": mid, "method": "Target.createTarget",
                             "params": {"url": url}}))
         while True:
             msg = json.loads(ws.recv())
-            if msg.get("id") == 1:
+            if msg.get("id") == mid:
                 if "error" in msg:
                     raise RuntimeError(f"createTarget error: {msg['error']}")
                 return msg["result"]["targetId"]
@@ -369,10 +433,21 @@ class JWClient:
               f"{self._h('xkxnm')}-{self._h('xkxqm')}")
 
     def _h(self, key: str, kklxdm: str = None) -> str:
-        """取 hidden 参数：优先该 tab 的 display 参数，回退全局。"""
+        """取 hidden 参数：指定 tab 优先该 tab 的 display 参数，否则全局，
+        再回退到任一 tab 的 display 参数。
+        注意：rwlx/xklc/rlkz 等只在 display 页参数（tab_hidden）里，
+        index 页全局 hidden（self.hidden）没有它们；无参调用时若不回退
+        tab_hidden，会永远拿不到这些 key，导致误判"参数缺失"。
+        """
         if kklxdm and kklxdm in self.tab_hidden and key in self.tab_hidden[kklxdm]:
             return self.tab_hidden[kklxdm][key]
-        return self.hidden.get(key, "")
+        if self.hidden.get(key):
+            return self.hidden[key]
+        # 无参调用且全局没有（rwlx/xklc 等 display 字段）：回退任一 tab 的非空值
+        for th in self.tab_hidden.values():
+            if th.get(key):
+                return th[key]
+        return ""
 
     def cdp_refresh_hidden(self, ws_url: str) -> dict:
         """兜底：连浏览器 page 端点在 DOM 里读 hidden 实时值

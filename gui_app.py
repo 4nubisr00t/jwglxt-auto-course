@@ -17,8 +17,6 @@ from PIL import Image, ImageTk
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import grab
-from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
-                           check_alive, JWClient, JW_BASE, JW_HOST)
 from schedule import parse_sksj, any_conflict, slots_str
 
 try:
@@ -386,14 +384,18 @@ class App(ctk.CTk):
         self.worker = None
         self.stop_evt = None
         self.log_q = queue.Queue()
+        self._render_q = queue.Queue()   # 弹窗后台线程 -> 主线程 的渲染任务队列
+        self._ui_q = queue.Queue()       # 后台线程 -> 主线程 的 UI 更新任务队列
         self._running = False
         self._running_connect = False
+        self._running_crawl = False
         self.snapshot = None       # 抓取的全表缓存
         self.choosed_rows = []     # 已选课程列表（含 sksj）
         self.busy_slots = []       # 已选课全部时间槽（冲突检测基准）
 
         # 内部界面状态
         self._destroyed = False
+        self._view_windows = []    # 强引用所有弹窗，防止被 GC 回收导致闪退
         self._last_w = 0
         self._last_h = 0
         # 窗口图标设置（Windows Taskbar & Title bar）
@@ -605,13 +607,8 @@ class App(ctk.CTk):
         )
         self.btn_check.pack(side="left", fill="x", expand=True, padx=(4, 0))
 
-        # CDP 验证
-        self.btn_verify = ctk.CTkButton(
-            c1, text="🗝 会话凭据验证", command=self.verify, height=26,
-            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=7,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=11)
-        )
-        self.btn_verify.pack(fill="x", padx=8, pady=(4, 6))
+        # CDP 验证（已移除：与连接教务共用 browser 端点会撞车卡顿，
+        # 链路状态用「灵力自检」即可确认）
 
         # ---- 卡片 2: 目标课程 ----
         c2 = self._card(self.left_frame, "捕获目标 · Target", "🎯")
@@ -1139,8 +1136,42 @@ class App(ctk.CTk):
                 self._append_log(f"[{ts}] {text}", level)
         except queue.Empty:
             pass
+        # 弹窗渲染任务也在主线程消费（后台线程绝不碰 tkinter，避免闪退）
+        try:
+            while True:
+                win, lines = self._render_q.get_nowait()
+                try:
+                    if not win.winfo_exists():
+                        continue
+                    box = win._box
+                    box.delete("1.0", "end")
+                    for tag, ln in lines:
+                        box.insert("end", ln, tag)
+                except Exception:
+                    pass
+        except queue.Empty:
+            pass
+        # UI 更新任务（按钮状态/状态栏文案）统一在主线程执行
+        try:
+            while True:
+                fn = self._ui_q.get_nowait()
+                try:
+                    fn()
+                except Exception:
+                    pass
+        except queue.Empty:
+            pass
         if not self._destroyed:
             self.after(100, self._drain_log)
+
+    def _ui(self, fn):
+        """后台线程安全地投递一个 UI 更新到主线程执行。
+        tkinter 控件只能在主线程操作，后台线程直接 configure 会和
+        主线程的 Tcl 命令竞态，是闪退的根源之一。"""
+        try:
+            self._ui_q.put(fn)
+        except Exception:
+            pass
 
     def _status(self, text, color):
         self.status_lbl.configure(text=f"● [{text}]", text_color=color)
@@ -1161,7 +1192,8 @@ class App(ctk.CTk):
             self._log(f"✨ 教务回路连接成功: tabs={list(self.client.tabs)} "
                       f"rwlx={self.client._h('rwlx') or '?'} "
                       f"xklc={self.client._h('xklc') or '?'}", "ok")
-            self.lbl_stat_conn.configure(text="● 教务回路: 契约已连通", text_color=OK)
+            self._ui(lambda: self.lbl_stat_conn.configure(
+                text="● 教务回路: 契约已连通", text_color=OK))
             try:
                 rows = self.client.get_choosed()
                 self.choosed_rows = rows
@@ -1170,56 +1202,84 @@ class App(ctk.CTk):
                     self.busy_slots += parse_sksj(r.get("sksj") or "")
                 self._log(f"📚 已选课捕获: 共 {len(rows)} 门，占用时间槽 {len(self.busy_slots)} 段 "
                           f"（作为避冲基准）", "ok")
-                self.lbl_stat_choosed.configure(text=f"● 已选基准: {len(rows)} 门 ({len(self.busy_slots)}段避冲槽)", text_color=OK)
+                self._ui(lambda: self.lbl_stat_choosed.configure(
+                    text=f"● 已选基准: {len(self.choosed_rows)} 门 "
+                         f"({len(self.busy_slots)}段避冲槽)", text_color=OK))
             except Exception as e:
                 self._log(f"⚠️ 已选课获取遇到轻微阻碍: {e}", "warn")
-            self.btn_start.configure(state="normal")
-            self._status("结界展开 · 已连接", OK)
+            self._ui(lambda: self.btn_start.configure(state="normal"))
+            self._ui(lambda: self._status("结界展开 · 已连接", OK))
         except Exception as e:
             self._log(f"❌ 连接失败: {e}", "err")
-            self._status("回路阻断 · 失败", ERR)
-            self.lbl_stat_conn.configure(text="● 教务回路: 阻断异常", text_color=ERR)
+            self._ui(lambda: self._status("回路阻断 · 失败", ERR))
+            self._ui(lambda: self.lbl_stat_conn.configure(
+                text="● 教务回路: 阻断异常", text_color=ERR))
         finally:
             self._running_connect = False
-            self.btn_conn.configure(state="normal")
+            self._ui(lambda: self.btn_conn.configure(state="normal"))
 
     def crawl(self):
         if not self.client:
             self._log("⚠️ 请先点击「连接教务系统」", "warn")
             return
-        self._log("📜 正在全面扫描教务课程全表（获取班次/时间/地点/余量）...", "star")
+        if self._running_crawl:
+            self._log("⚠️ 全表扫描已在执行中，请稍候", "warn")
+            return
+        self._running_crawl = True
+        self.btn_crawl.configure(state="disabled")
+        self._status("全表扫描中...", ACCENT)
+        # 抓全表 + 逐课补全班次详情是重量级操作（数百次 HTTP），
+        # 必须在后台线程跑，否则主线程被阻塞、整个界面点不动（假死）。
+        threading.Thread(target=self._crawl_worker, daemon=True).start()
+
+    def _crawl_worker(self):
         try:
+            self._log("📜 正在全面扫描教务课程全表（获取班次/时间/地点/余量）...", "star")
             kklxdms = sorted(self.client.tabs.keys())
             snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log, detail=True)
             self.snapshot = snap
             self._log(f"✨ 全表解析完成: 共捕获 {len(snap)} 门课程（类别 {kklxdms}）", "ok")
-            self.lbl_stat_snap.configure(text=f"● 全表缓存: 已就绪 ({len(snap)} 门)", text_color=OK)
+            self._ui(lambda: self.lbl_stat_snap.configure(
+                text=f"● 全表缓存: 已就绪 ({len(snap)} 门)", text_color=OK))
+            self._ui(lambda: self._status("结界展开 · 已连接", OK))
         except Exception as e:
             self._log(f"❌ 抓取失败: {e}", "err")
+            self._ui(lambda: self._status("全表扫描失败", ERR))
+        finally:
+            self._running_crawl = False
+            self._ui(lambda: self.btn_crawl.configure(state="normal"))
 
     def selfcheck(self):
         if not self.client:
             self._log("⚠️ 请先连接教务系统", "warn")
             return
+        # get_choosed 是网络请求，丢后台线程，避免主线程卡顿
+        threading.Thread(target=self._selfcheck_worker, daemon=True).start()
+
+    def _selfcheck_worker(self):
         try:
             rows = self.client.get_choosed()
             self._log(f"⚡ 链路自检通过: 当前已选 {len(rows)} 门课程", "ok")
-            for r in rows[:8]:
+            if not rows:
+                self._log("   （当前未选任何课程）", "dim")
+            for r in rows:
                 self._log(f"   已选: {r.get('kcmc')}", "dim")
-            if len(rows) > 8:
-                self._log(f"   ... 共 {len(rows)} 门", "dim")
         except Exception as e:
             self._log(f"❌ 自检失败: {e}", "err")
 
-    def verify(self):
-        try:
-            cookies = cdp_get_cookies(get_cdp_ws_url())
-            jw = [c for c in cookies if JW_HOST in (c.get("domain") or "")]
-            self._log(f"🗝 CDP 会话验证: 共 {len(cookies)} 个 Cookie，教务域凭据 {len(jw)} 枚", "ok")
-        except Exception as e:
-            self._log(f"❌ CDP 验证失败: {e}", "err")
+    @staticmethod
+    def _teacher_name(jsxx: str) -> str:
+        """从 jsxx 教师字段提取姓名。
+        教务 jsxx 常见格式: "工号/姓名" 或 "工号/姓名/职称"（如 0001/张三/教授）
+        ——姓名在第二段。旧代码取 [-1] 会拿到职称（显示成"教授"）。
+        """
+        parts = [p for p in (jsxx or "").split("/") if p.strip()]
+        if not parts:
+            return "?"
+        if len(parts) >= 2:
+            return parts[1].strip()      # 工号/姓名[/职称]
+        return parts[0].strip()          # 只有一段：直接展示
 
-    # ---------------- 弹窗窗口统一二次元美学 ----------------
     def _conflict_with(self, slots):
         if not slots:
             return None
@@ -1234,6 +1294,21 @@ class App(ctk.CTk):
         win.title(f"✦ {title} · 漆黑结界 ✦")
         win.geometry("960x620")
         win.configure(fg_color=BG)
+        # 关键：必须持有强引用，否则函数返回后 Toplevel 被 GC 回收，弹窗闪退
+        self._view_windows.append(win)
+
+        def _on_close():
+            try:
+                if win in self._view_windows:
+                    self._view_windows.remove(win)
+            except Exception:
+                pass
+            try:
+                win.destroy()
+            except Exception:
+                pass
+
+        win.protocol("WM_DELETE_WINDOW", _on_close)
 
         # 顶部渐变标题卡
         top_bar = ctk.CTkFrame(win, fg_color=CARD, corner_radius=10,
@@ -1314,38 +1389,61 @@ class App(ctk.CTk):
             box.insert("end", f"✗ 全表魔力范围内未检索到包含「{text}」的课程\n", "conflict")
             return
 
-        for kch_id, c in hits[:12]:
-            box.insert("end", f"❖ {c['kcmc']}（{c['kch']} · {c['xf']}学分）\n", "head")
+        # 班次透析需逐课请求 get_jxbs（每门一次 HTTP），丢后台线程跑，
+        # 避免主线程被串行网络请求阻塞、弹窗假死。
+        box.insert("end", f"🔮 正在透析 {len(hits[:12])} 门课程的班次详情...\n", "dim")
+
+        def _fetch_all():
+            # 在后台线程执行所有网络请求，只返回文本行，不碰任何 tkinter 控件
+            lines = []
+            for kch_id, c in hits[:12]:
+                lines.append(("head", f"❖ {c['kcmc']}（{c['kch']} · {c['xf']}学分）\n"))
+                try:
+                    jxbs = self.client.get_jxbs(kch_id, c["kklxdm"])
+                except Exception as e:
+                    lines.append(("conflict", f"  班次获取失败: {e}\n"))
+                    lines.append(("dim", "\n"))
+                    continue
+                for jb in jxbs:
+                    slots = parse_sksj(jb.get("sksj") or "")
+                    st = slots_str(slots)
+                    rl = int(jb.get("jxbrl") or 0)   # 容量
+                    yx = int(jb.get("yxzrs") or 0)   # 已选
+                    safe = rl - yx if rl else -1      # 余量
+                    teacher = self._teacher_name(jb.get("jsxx") or "")
+                    conf = self._conflict_with(slots)
+                    if conf:
+                        tag = "conflict"
+                        mark = f"✗ 冲突: 与已选「{conf}」重叠"
+                    elif rl and safe <= 0:
+                        tag = "conflict"
+                        mark = "✗ 已满员 · 不可抢"
+                    else:
+                        tag = "ok"
+                        mark = "✓ 结界通畅 · 可抢"
+                    yl = f"{safe}" if safe >= 0 else "?"
+                    lines.append((tag,
+                                  f"  [{jb.get('jxb_id','')[:8]}] {st} | "
+                                  f"{jb.get('jxdd') or '?'} | {teacher} | "
+                                  f"余量 {yl}/{rl or '?'} | {mark}\n"))
+                lines.append(("dim", "\n"))
+            if len(hits) > 12:
+                lines.append(("dim",
+                              f"... 还有 {len(hits) - 12} 门课程未展开，请使用更精确的关键词\n"))
+            return lines
+
+        def _worker():
+            # 后台线程：只做网络请求 + 投递队列，绝不触碰任何 tkinter 对象
             try:
-                jxbs = self.client.get_jxbs(kch_id, c["kklxdm"])
+                lines = _fetch_all()
             except Exception as e:
-                box.insert("end", f"  班次获取失败: {e}\n", "conflict")
-                continue
+                lines = [("conflict", f"✗ 透析中断: {e}\n")]
+            try:
+                self._render_q.put((win, lines))
+            except Exception:
+                pass   # 主程序退出等极端情况，丢弃结果
 
-            for jb in jxbs:
-                slots = parse_sksj(jb.get("sksj") or "")
-                st = slots_str(slots)
-                rl = int(jb.get("jxbrl") or 0)
-                yx = int(jb.get("yxzrs") or 0)
-                safe = rl - yx if rl else -1
-                teacher = (jb.get("jsxx") or "").split("/")[-1] or "?"
-                conf = self._conflict_with(slots)
-
-                if conf:
-                    tag = "conflict"
-                    mark = f"✗ 冲突: 与已选「{conf}」重叠"
-                else:
-                    tag = "ok"
-                    mark = "✓ 结界通畅 · 可抢"
-                yl = f"{safe}" if safe >= 0 else "?"
-                box.insert("end",
-                           f"  [{jb.get('jxb_id','')[:8]}] {st} | "
-                           f"{jb.get('jxdd') or '?'} | {teacher} | "
-                           f"余量 {yl}/{rl or '?'} | {mark}\n", tag)
-            box.insert("end", "\n")
-
-        if len(hits) > 12:
-            box.insert("end", f"... 还有 {len(hits) - 12} 门课程未展开，请使用更精确的关键词\n", "dim")
+        threading.Thread(target=_worker, daemon=True).start()
 
     def open_time_filter(self):
         if self.client is None:
@@ -1439,6 +1537,9 @@ class App(ctk.CTk):
                 if conf:
                     tag = "conflict"
                     mark = f"✗ 与「{conf}」冲突"
+                elif rl and safe <= 0:
+                    tag = "conflict"
+                    mark = "✗ 已满员 · 不可抢"
                 else:
                     tag = "ok"
                     mark = "✓ 结界通畅 · 可抢"
@@ -1510,10 +1611,11 @@ class App(ctk.CTk):
         finally:
             self._running = False
             if self.client:
-                self.btn_start.configure(state="normal")
-            self.btn_stop.configure(state="disabled")
-            self._status("结界展开 · 已连接" if self.client else "结界休眠 · 未连接",
-                         OK if self.client else DIM)
+                self._ui(lambda: self.btn_start.configure(state="normal"))
+            self._ui(lambda: self.btn_stop.configure(state="disabled"))
+            self._ui(lambda: self._status(
+                "结界展开 · 已连接" if self.client else "结界休眠 · 未连接",
+                OK if self.client else DIM))
             self._log("✧ 抢课结界任务平息 ✧", "info")
 
     def stop(self):
@@ -1522,11 +1624,42 @@ class App(ctk.CTk):
             self._log("🛑 已发送停止信号，将在本轮回路结束后退出", "warn")
 
 
+CRASH_LOG = os.path.join(BASE_DIR, "crash.log")
+
+
+def _crash_dump(tag: str, exc):
+    """把未捕获异常写入 crash.log，避免 tkinter 回调异常导致无声闪退。"""
+    import traceback
+    try:
+        with open(CRASH_LOG, "a", encoding="utf-8") as f:
+            f.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] [{tag}]\n")
+            traceback.print_exc(file=f)
+    except Exception:
+        pass
+
+
+def _tk_crash_handler(exc, val, tb):
+    import traceback
+    _crash_dump("tkinter-callback", val)
+    try:
+        msg = f"遇见了不该存在的异常：{val}\n\n详见 {CRASH_LOG}"
+        root = tk.Tk() if tk else None
+        if root is not None:
+            from tkinter import messagebox
+            root.withdraw()
+            messagebox.showerror("✦ 漆黑结界 · 异常 ✦", msg)
+            root.destroy()
+    except Exception:
+        pass
+
+
 def main():
     if ctk is None:
         print("缺少 customtkinter: pip install customtkinter pillow")
         sys.exit(1)
+    sys.excepthook = lambda t, v, tb: _crash_dump("thread", v)
     app = App()
+    app.report_callback_exception = _tk_crash_handler
     app.mainloop()
 
 
