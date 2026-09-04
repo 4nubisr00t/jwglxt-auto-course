@@ -33,6 +33,12 @@ DOMAIN_FILTER = JW_HOST            # 只带教务域 cookie
 JW_INDEX = (f"{JW_BASE}/xsxk/zzxkyzb_cxZzxkYzbIndex.html?"
             "gnmkdm=N253512&layout=default")
 
+# 湘大统一身份认证（CAS）登录入口：作为托管 Chrome 的启动页，
+# 登录后从「应用中心」进入教务系统，教务域才会建立会话。
+PORTAL_URL = ("https://portal2020.xtu.edu.cn/cas/login"
+              "?service=https://portal2020.xtu.edu.cn/application-center")
+SPAWN_URL = PORTAL_URL             # 托管 Chrome 默认打开的页面
+
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
 

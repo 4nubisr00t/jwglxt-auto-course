@@ -18,7 +18,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
-                           check_alive, JWClient, spawn_chrome, JW_INDEX)
+                           check_alive, JWClient, spawn_chrome, SPAWN_URL)
 
 BIG_PAGE = 100000          # 大分页一次拉全
 SUCCESS_FLAGS = ("1", "3", "6")
@@ -111,11 +111,11 @@ def submit_course(client, course, jxb, sub_ids=None):
     )
 
 
-def init_client(log=print, spawn=True, login_wait=120):
+def init_client(log=print, spawn=True, login_wait=300):
     """CDP cookie -> 会话 -> 页面上下文。返回 (client, ws)。
 
     spawn=True 时：检测不到调试实例则自动拉起托管 Chrome（独立 profile），
-    并等待用户登录（最多 login_wait 秒）。
+    打开湘大门户登录页，并等待用户登录后进入教务系统（最多 login_wait 秒）。
     """
     ws = None
     try:
@@ -124,7 +124,7 @@ def init_client(log=print, spawn=True, login_wait=120):
         ws = None
     if ws is None and spawn:
         log("[+] 未检测到调试实例，自动启动托管 Chrome...")
-        ws = spawn_chrome(JW_INDEX)
+        ws = spawn_chrome(SPAWN_URL)
         log(f"[+] 已打开 Chrome 窗口，请在其中登录教务并打开选课页")
         deadline = time.time() + login_wait
         last_progress = 0
@@ -151,7 +151,7 @@ def init_client(log=print, spawn=True, login_wait=120):
             raise RuntimeError("会话失效，请重新登录教务并刷新页面")
     client = JWClient(session)
     if not client._h("rwlx"):
-        client.cdp_refresh_hidden(get_cdp_ws_url())
+        client.cdp_refresh_hidden(ws)
     return client, ws
 
 
