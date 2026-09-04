@@ -257,9 +257,10 @@ class App(ctk.CTk):
             return
         self._log("抓取课程全表...")
         try:
-            snap = grab.fetch_full_snapshot(self.client, ["10", "11"], self._log)
+            kklxdms = sorted(self.client.tabs.keys())   # 全部类别（主修/体育/通识/特殊）
+            snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log)
             self.snapshot = snap
-            self._log(f"全表完成: {len(snap)} 门课程", "ok")
+            self._log(f"全表完成: {len(snap)} 门课程（类别 {kklxdms}）", "ok")
         except Exception as e:
             self._log(f"抓取失败: {e}", "err")
 
@@ -421,6 +422,20 @@ class App(ctk.CTk):
                 if s.day == day and max(s.start, a) <= min(s.end, b):
                     return True
             return False
+
+        def mine_in_slot(r):
+            for s in parse_sksj(r.get("sksj") or ""):
+                if s.day == day and max(s.start, a) <= min(s.end, b):
+                    return True
+            return False
+
+        mine = [r for r in self.choosed_rows if mine_in_slot(r)]
+        if mine:
+            box.insert("end", f"★ 该时段你已在上的课（{len(mine)} 门）：\n", "warn")
+            for r in mine[:10]:
+                box.insert("end", f"    {r.get('kcmc')} | "
+                                   f"{slots_str(parse_sksj(r.get('sksj') or ''))}\n", "dim")
+            box.insert("end", "\n")
 
         count = 0
         for kch_id, c in self.snapshot.items():
