@@ -177,6 +177,48 @@ def get_cdp_ws_url() -> str:
         ) from e
 
 
+def open_page_via_cdp(ws_url: str, url: str) -> str:
+    """通过 CDP 在浏览器新建标签页并导航到 url，返回 targetId。"""
+    ws = websocket.create_connection(ws_url, timeout=10, suppress_origin=True)
+    try:
+        ws.send(json.dumps({"id": 1, "method": "Target.createTarget",
+                            "params": {"url": url}}))
+        while True:
+            msg = json.loads(ws.recv())
+            if msg.get("id") == 1:
+                if "error" in msg:
+                    raise RuntimeError(f"createTarget error: {msg['error']}")
+                return msg["result"]["targetId"]
+    finally:
+        ws.close()
+
+
+def wait_page_loaded(ws_url: str, url_fragment: str, timeout: float = 20.0) -> bool:
+    """轮询等待某个 URL 片段的 page target 出现（页面真正开始加载才算）。"""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            ws = websocket.create_connection(ws_url, timeout=10,
+                                             suppress_origin=True)
+            try:
+                ws.send(json.dumps({"id": 1, "method": "Target.getTargets"}))
+                while True:
+                    msg = json.loads(ws.recv())
+                    if msg.get("id") == 1:
+                        urls = [t.get("url", "") for t in
+                                msg["result"]["targetInfos"]
+                                if t.get("type") == "page"]
+                        if any(url_fragment in u for u in urls):
+                            return True
+                        break
+            finally:
+                ws.close()
+        except Exception:
+            pass
+        time.sleep(1)
+    return False
+
+
 def cdp_get_cookies(ws_url: str, timeout: int = 10, retries: int = 5) -> list:
     """CDP Storage.getCookies 返回浏览器全部 cookie。
 
@@ -359,8 +401,13 @@ class JWClient:
                 targets = msg["result"]["targetInfos"]
                 break
         page = next((t for t in targets
-                     if t.get("type") == "page" and JW_HOST in t.get("url", "")),
+                     if t.get("type") == "page" and JW_HOST in t.get("url", "")
+                     and ("zzxkyzb" in t.get("url", "") or "xsxk" in t.get("url", ""))),
                     None)
+        if not page:
+            page = next((t for t in targets
+                         if t.get("type") == "page" and JW_HOST in t.get("url", "")),
+                        None)
         if not page:
             page = next((t for t in targets if t.get("type") == "page"), None)
         if not page:

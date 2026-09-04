@@ -19,7 +19,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
-                           check_alive, JWClient, spawn_chrome, SPAWN_URL)
+                           check_alive, JWClient, spawn_chrome, SPAWN_URL,
+                           open_page_via_cdp, wait_page_loaded, JW_INDEX)
 from schedule import parse_sksj, any_conflict, slots_str
 
 BIG_PAGE = 100000          # 大分页一次拉全
@@ -205,6 +206,26 @@ def init_client(log=print, spawn=True, login_wait=300):
     client = JWClient(session)
     if not client._h("rwlx"):
         client.cdp_refresh_hidden(ws)
+    if not client._h("rwlx"):
+        # 浏览器里没有打开选课页：自动新建标签打开选课页，等页面就绪后重读 DOM
+        log("[!] 未检测到已打开的选课页，自动打开教务选课页...")
+        for attempt in range(3):
+            try:
+                open_page_via_cdp(ws, JW_INDEX)
+            except Exception as e:
+                log(f"    打开选课页失败: {e}")
+                break
+            loaded = wait_page_loaded(ws, "zzxkyzb", timeout=20)
+            if loaded:
+                time.sleep(3)          # 让页面脚本跑完、隐藏参数渲染出来
+                client.cdp_refresh_hidden(ws)
+                if client._h("rwlx"):
+                    log("[+] 选课页参数已读取（自动打开）")
+                    break
+            else:
+                log(f"    第 {attempt + 1} 次：选课页加载超时，重试")
+        if not client._h("rwlx"):
+            log("[!] 仍未能读取选课参数：请确认教务选课页已打开（或在 Chrome 中打开选课页后重试）")
     return client, ws
 
 
