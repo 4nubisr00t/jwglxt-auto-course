@@ -36,7 +36,6 @@ except Exception:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 ASSET_BG = os.path.join(ASSETS_DIR, "bg_anime.jpg")
-ASSET_CHAR = os.path.join(ASSETS_DIR, "char_full.jpg")
 
 # ---------------- 二次元主题（深渊暗夜紫 × 绯红魔眼 × 樱花粉 × 星辉紫） ----------------
 BG = "#0c0a17"          # 深渊暗夜黑紫
@@ -249,8 +248,7 @@ class App(ctk.CTk):
         self._destroyed = False
         self._last_w = 0
         self._last_h = 0
-        self._char_visible = True
-        self._char_photo = None
+        self._wide_log = False     # 日志宽屏展开开关
 
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
         self._build()
@@ -273,17 +271,17 @@ class App(ctk.CTk):
     # ---------------- UI 构建 ----------------
     def _card(self, parent, title, icon="✦"):
         """Galgame 风格卡片：顶部霓虹粉发光条 + 左侧星标 + 标题"""
-        outer = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=14,
+        outer = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=12,
                              border_width=1, border_color=LINE)
         outer.pack(fill="x", pady=(0, 6))
 
         # 顶部霓虹光条
         glow = ctk.CTkFrame(outer, fg_color=ACCENT, height=2, corner_radius=0, width=1)
-        glow.pack(fill="x", padx=10, pady=(4, 0))
+        glow.pack(fill="x", padx=10, pady=(3, 0))
 
         # 标题栏
         head = ctk.CTkFrame(outer, fg_color="transparent")
-        head.pack(fill="x", padx=12, pady=(2, 2))
+        head.pack(fill="x", padx=10, pady=(2, 2))
         ctk.CTkLabel(head, text=icon, text_color=ACCENT,
                      font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
         ctk.CTkLabel(head, text=f" {title}", text_color=TEXT,
@@ -300,21 +298,21 @@ class App(ctk.CTk):
                           fg_color=fg, hover_color=hv,
                           border_width=1 if border else 0,
                           border_color=border or LINE,
-                          corner_radius=9,
+                          corner_radius=8,
                           text_color=tc,
                           font=ctk.CTkFont(family=TAG_FONT, size=11,
                                            weight="bold" if bold else "normal"))
-        b.pack(fill="x", padx=10, pady=2)
+        b.pack(fill="x", padx=8, pady=2)
         return b
 
     def _build(self):
-        # 1. 最底层全屏夜空与动态粒子画布
+        # 1. 最底层全屏夜空与动态粒子画布（插画背景天然融入，人物自然立于右侧）
         self.sky = tk.Canvas(self, bg=BG, highlightthickness=0)
         self.sky.pack(fill="both", expand=True)
 
-        # 2. 顶部主标题栏（高度 52px）
+        # 2. 顶部主标题栏（高度 48px）
         head = ctk.CTkFrame(self, fg_color=CARD, corner_radius=12,
-                            border_width=1, border_color=LINE, height=52)
+                            border_width=1, border_color=LINE, height=48)
         head.place(relx=0.015, rely=0.012, relwidth=0.97)
 
         # 左侧 LOGO 与徽章
@@ -334,19 +332,9 @@ class App(ctk.CTk):
         # 中部副标
         ctk.CTkLabel(head, text="— ✧ 漆黑之誓 · 自动选课系统 ✧ —", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=11)
-                     ).place(relx=0.53, rely=0.5, anchor="center")
+                     ).place(relx=0.52, rely=0.5, anchor="center")
 
-        # 右侧立绘折叠开关 + 状态指示灯
-        self.btn_toggle_char = ctk.CTkButton(
-            head, text="✦ 立绘", width=62, height=26,
-            fg_color=CARD2, hover_color=CARD_HOVER,
-            border_width=1, border_color=LINE,
-            corner_radius=8, text_color=ACCENT,
-            font=ctk.CTkFont(family=TAG_FONT, size=10),
-            command=self._toggle_char_stage
-        )
-        self.btn_toggle_char.place(relx=0.825, rely=0.5, anchor="e")
-
+        # 右侧状态指示灯
         self.status_lbl = ctk.CTkLabel(
             head, text="○ [结界休眠 · 未连接]", text_color=DIM,
             font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold")
@@ -357,35 +345,38 @@ class App(ctk.CTk):
         head_line = ctk.CTkFrame(head, fg_color=ACCENT, height=2, width=1, corner_radius=0)
         head_line.place(relx=0, rely=1.0, relwidth=1.0, anchor="sw")
 
-        # 3. 左栏控制核心（浮动卡片式面板，严格控制高度防止溢出）
-        self.left_frame = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
-                                       border_width=1, border_color=LINE)
-        self.left_frame.place(relx=0.015, rely=0.095, relwidth=0.34, relheight=0.885)
+        # 3. 左栏控制核心（使用 CTkScrollableFrame 彻底杜绝任何分辨率下的裁切，饱满均衡）
+        self.left_frame = ctk.CTkScrollableFrame(
+            self, fg_color=CARD, corner_radius=14,
+            border_width=1, border_color=LINE,
+            scrollbar_button_color=LINE, scrollbar_button_hover_color=ACCENT
+        )
+        self.left_frame.place(relx=0.015, rely=0.090, relwidth=0.345, relheight=0.892)
 
-        # ---- 卡片 1: 契约回路 ----
+        # ---- 卡片 1: 契约链路 ----
         c1 = self._card(self.left_frame, "契约链路", "✧")
         self.btn_conn = self._btn(c1, "❖ 连接教务系统", self.connect, ACCENT, 32, bold=True)
 
         # 并排行 1: 抓取全表 + 班次透镜
         r1 = ctk.CTkFrame(c1, fg_color="transparent")
-        r1.pack(fill="x", padx=10, pady=2)
+        r1.pack(fill="x", padx=8, pady=2)
         self.btn_crawl = ctk.CTkButton(
             r1, text="📜 抓取全表", command=self.crawl, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
             text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
-        self.btn_crawl.pack(side="left", fill="x", expand=True, padx=(0, 4))
+        self.btn_crawl.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
         self.btn_view = ctk.CTkButton(
             r1, text="🔍 班次透镜", command=self.open_class_view, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
             text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
-        self.btn_view.pack(side="left", fill="x", expand=True, padx=(4, 0))
+        self.btn_view.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
-        # 并排行 2: 时段筛课 + 链路自检 + CDP验证 (紧凑 3 列)
+        # 并排行 2: 时段筛课 + 链路自检
         r2 = ctk.CTkFrame(c1, fg_color="transparent")
-        r2.pack(fill="x", padx=10, pady=(2, 4))
+        r2.pack(fill="x", padx=8, pady=2)
         self.btn_tfilter = ctk.CTkButton(
             r2, text="⏳ 时段筛课", command=self.open_time_filter, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
@@ -394,35 +385,36 @@ class App(ctk.CTk):
         self.btn_tfilter.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
         self.btn_check = ctk.CTkButton(
-            r2, text="⚡ 自检", command=self.selfcheck, height=28,
+            r2, text="⚡ 链路自检", command=self.selfcheck, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10)
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
-        self.btn_check.pack(side="left", padx=2)
+        self.btn_check.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
+        # CDP 验证
         self.btn_verify = ctk.CTkButton(
-            r2, text="🗝 CDP", command=self.verify, height=28,
-            fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
+            c1, text="🗝 CDP 会话凭据验证", command=self.verify, height=24,
+            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=7,
             text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10)
         )
-        self.btn_verify.pack(side="left", padx=(3, 0))
+        self.btn_verify.pack(fill="x", padx=8, pady=(2, 4))
 
         # ---- 卡片 2: 目标课程 ----
         c2 = self._card(self.left_frame, "捕获目标", "✦")
         self.kw = ctk.CTkEntry(
-            c2, placeholder_text="关键词 (空格分隔) 例: 敦煌 光影 算法",
+            c2, placeholder_text="输入课程关键词 (空格分隔，如: 敦煌 光影)",
             height=30, fg_color=CARD2, border_color=LINE, text_color=TEXT,
             font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
-        self.kw.pack(fill="x", padx=10, pady=(2, 4))
+        self.kw.pack(fill="x", padx=8, pady=(2, 4))
 
         self.cat = {"10": True, "11": True, "01": False}
         self.cat_names = {"10": "通识选修", "11": "特殊课程", "01": "主修课程"}
         self.cat_icons = {"10": "❀", "11": "✦", "01": "♛"}
 
-        # 选项卡 Canvas（高清晰度 44px 描边彩绘）
+        # 选项卡 Canvas（清晰高对比 44px 描边彩绘）
         self.cat_cv = tk.Canvas(c2, height=44, bg=CARD, highlightthickness=0)
-        self.cat_cv.pack(fill="x", padx=10, pady=(0, 4))
+        self.cat_cv.pack(fill="x", padx=8, pady=(0, 4))
         self.cat_cv.bind("<Button-1>", self._on_cat_click)
         self.cat_cv.bind("<Configure>", lambda e: self._draw_cat_tabs())
         self.after(150, self._draw_cat_tabs)
@@ -430,12 +422,12 @@ class App(ctk.CTk):
         # ---- 卡片 3: 咒术参数 ----
         c3 = self._card(self.left_frame, "运行参数", "◇")
         pr = ctk.CTkFrame(c3, fg_color="transparent")
-        pr.pack(fill="x", padx=10, pady=(1, 2))
+        pr.pack(fill="x", padx=8, pady=(1, 2))
 
         ctk.CTkLabel(pr, text="轮询(s)", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.interval = ctk.CTkEntry(
-            pr, width=54, height=26, fg_color=CARD2, border_color=LINE,
+            pr, width=52, height=26, fg_color=CARD2, border_color=LINE,
             text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=11)
         )
         self.interval.insert(0, "1.5")
@@ -444,14 +436,14 @@ class App(ctk.CTk):
         ctk.CTkLabel(pr, text="超时(s)", text_color=DIM,
                      font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.timeout = ctk.CTkEntry(
-            pr, width=64, height=26, fg_color=CARD2, border_color=LINE,
+            pr, width=62, height=26, fg_color=CARD2, border_color=LINE,
             text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=11)
         )
         self.timeout.insert(0, "1800")
         self.timeout.pack(side="left", padx=4)
 
         swrow = ctk.CTkFrame(c3, fg_color="transparent")
-        swrow.pack(fill="x", padx=10, pady=(3, 5))
+        swrow.pack(fill="x", padx=8, pady=(3, 4))
         self.dry_sw = ctk.CTkSwitch(
             swrow, text="预演模式", progress_color=ACCENT, border_width=1,
             border_color=LINE, fg_color=CARD3, button_color=ACCENT,
@@ -467,30 +459,53 @@ class App(ctk.CTk):
         )
         self.cpx_sw.pack(side="left", padx=(14, 0))
 
+        # ---- 卡片 4: 结界感知面板（填充空白，提供直观状态） ----
+        c4 = self._card(self.left_frame, "结界感知", "🔮")
+        stat_box = ctk.CTkFrame(c4, fg_color="transparent")
+        stat_box.pack(fill="x", padx=10, pady=(2, 4))
+
+        self.lbl_stat_conn = ctk.CTkLabel(
+            stat_box, text="● 教务回路: 待同步", text_color=DIM,
+            font=ctk.CTkFont(family=TAG_FONT, size=10)
+        )
+        self.lbl_stat_conn.pack(anchor="w")
+
+        self.lbl_stat_choosed = ctk.CTkLabel(
+            stat_box, text="● 已选基准: 0 门课 (0段避冲槽)", text_color=DIM,
+            font=ctk.CTkFont(family=TAG_FONT, size=10)
+        )
+        self.lbl_stat_choosed.pack(anchor="w")
+
+        self.lbl_stat_snap = ctk.CTkLabel(
+            stat_box, text="● 全表缓存: 待抓取", text_color=DIM,
+            font=ctk.CTkFont(family=TAG_FONT, size=10)
+        )
+        self.lbl_stat_snap.pack(anchor="w")
+
         # ---- 操作主按钮（高亮大按钮 + 停止按钮） ----
         self.btn_start = ctk.CTkButton(
             self.left_frame, text="✦ 展开结界 · 启动抢课 ✦", height=40,
-            fg_color=ACCENT, hover_color=ACCENT_HOVER, corner_radius=11,
+            fg_color=ACCENT, hover_color=ACCENT_HOVER, corner_radius=10,
             border_width=1, border_color="#ffe0ec",
             text_color="#200a16",
-            font=ctk.CTkFont(family=TAG_FONT, size=14, weight="bold"),
+            font=ctk.CTkFont(family=TAG_FONT, size=13, weight="bold"),
             command=self.start
         )
-        self.btn_start.pack(fill="x", padx=12, pady=(4, 4))
+        self.btn_start.pack(fill="x", padx=8, pady=(4, 3))
         self.btn_start.configure(state="disabled")
 
         self.btn_stop = ctk.CTkButton(
-            self.left_frame, text="✧ 撤除结界 · 停止 ✧", height=32,
+            self.left_frame, text="✧ 撤除结界 · 停止 ✧", height=30,
             fg_color="transparent", hover_color="#361726",
             border_width=1, border_color=ERR, text_color=ERR,
-            corner_radius=9,
-            font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold"),
+            corner_radius=8,
+            font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold"),
             command=self.stop
         )
-        self.btn_stop.pack(fill="x", padx=12, pady=(0, 6))
+        self.btn_stop.pack(fill="x", padx=8, pady=(0, 6))
         self.btn_stop.configure(state="disabled")
 
-        # 4. 中栏/右栏：Galgame 对话框风格日志终端
+        # 4. 中栏：Galgame 对话框风格实时日志终端
         self.log_frame = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
                                       border_width=1, border_color=LINE)
 
@@ -501,6 +516,14 @@ class App(ctk.CTk):
             log_head, text="✧ 魂之回响 · 实时结界日志 ✧", text_color=ACCENT2,
             font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold")
         ).pack(side="left")
+
+        self.btn_toggle_layout = ctk.CTkButton(
+            log_head, text="⛶ 宽屏", width=52, height=22,
+            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
+            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
+            command=self._toggle_wide_log
+        )
+        self.btn_toggle_layout.pack(side="right", padx=(4, 0))
 
         self.btn_clear_log = ctk.CTkButton(
             log_head, text="清空", width=46, height=22,
@@ -523,39 +546,33 @@ class App(ctk.CTk):
         self.log_box.tag_config("t", foreground="#786c99")
         self.log_box.tag_config("ruby", foreground=CRIMSON)
 
-        # 5. 右栏：美少女立绘展台（Stage）
-        self.char_stage = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
-                                       border_width=1, border_color=LINE)
+        # 5. 右侧区域：美少女自然立于星空背景，上方悬浮优雅半透明信息胶囊（无突兀卡片框）
+        self.char_overlay = ctk.CTkFrame(self, fg_color="transparent")
 
-        # 立绘卡片顶部发光条
-        cglow = ctk.CTkFrame(self.char_stage, fg_color=CRIMSON, height=2, width=1, corner_radius=0)
-        cglow.pack(fill="x", padx=10, pady=(4, 0))
-
-        char_head = ctk.CTkFrame(self.char_stage, fg_color="transparent")
-        char_head.pack(fill="x", padx=10, pady=(2, 2))
+        # 顶部悬浮名牌（柔和半透明胶囊）
+        badge = ctk.CTkFrame(self.char_overlay, fg_color=CARD, corner_radius=12,
+                             border_width=1, border_color=LINE)
+        badge.pack(anchor="ne", padx=10, pady=(4, 0))
         ctk.CTkLabel(
-            char_head, text="✦ 影华", text_color=ACCENT,
+            badge, text="✦ 结界守护者 · 影华", text_color=ACCENT,
             font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold")
-        ).pack(side="left")
+        ).pack(side="left", padx=(10, 6), pady=4)
         ctk.CTkLabel(
-            char_head, text="结界守护者", text_color=DIM,
-            font=ctk.CTkFont(family=TAG_FONT, size=10)
-        ).pack(side="right")
-
-        # 立绘 Canvas（可交互点击）
-        self.char_cv = tk.Canvas(self.char_stage, bg=CARD, highlightthickness=0)
-        self.char_cv.pack(fill="both", expand=True, padx=6, pady=(0, 4))
-        self.char_cv.bind("<Button-1>", self._on_char_click)
-        self.char_cv.bind("<Configure>", lambda e: self._render_char_portrait())
-
-        char_foot = ctk.CTkFrame(self.char_stage, fg_color=CARD2, corner_radius=6, height=22)
-        char_foot.pack(fill="x", padx=8, pady=(0, 6))
-        ctk.CTkLabel(
-            char_foot, text="● 契约连通 · 点击互动", text_color=OK,
+            badge, text="● 契约连通", text_color=OK,
             font=ctk.CTkFont(family=TAG_FONT, size=9)
-        ).pack(expand=True)
+        ).pack(side="left", padx=(0, 10), pady=4)
 
-        self._update_panel_layout()
+        # 底部透明点击互动区（点击右侧星空人物触发语音）
+        self.char_touch = ctk.CTkButton(
+            self.char_overlay, text="✧ 触碰微光 ✧", height=24, width=88,
+            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=10,
+            border_width=1, border_color=LINE, text_color=ACCENT2,
+            font=ctk.CTkFont(family=TAG_FONT, size=10),
+            command=self._on_char_touch
+        )
+        self.char_touch.pack(side="bottom", anchor="se", padx=14, pady=12)
+
+        self._apply_layout()
 
         # 初始欢迎辞
         welcome_banner = "✧· ──────────────── ✦ 漆 黑 课 程 结 界 启 动 ✦ ──────────────── ·✧\n"
@@ -563,57 +580,25 @@ class App(ctk.CTk):
         self._log("✨ 欢迎回来，主人。湘潭大学自动化选课结界已就绪。", "ok")
         self._log("🔮 请先点击「❖ 连接教务系统」，随后「📜 抓取全表」，输入目标关键词开始狙击吧。")
 
-    def _update_panel_layout(self):
-        """根据是否展开立绘展台动态调整日志与立绘布局"""
-        if self._char_visible:
-            self.log_frame.place(relx=0.365, rely=0.095, relwidth=0.395, relheight=0.885)
-            self.char_stage.place(relx=0.77, rely=0.095, relwidth=0.215, relheight=0.885)
-            self.btn_toggle_char.configure(text="✕ 收起立绘")
-            self.after(60, self._render_char_portrait)
+    def _apply_layout(self):
+        """根据是否宽屏布局灵活排布日志框与右侧人物视窗"""
+        if self._wide_log:
+            # 宽屏日志模式：覆盖右侧，方便审阅长表
+            self.char_overlay.place_forget()
+            self.log_frame.place(relx=0.372, rely=0.090, relwidth=0.613, relheight=0.892)
+            self.btn_toggle_layout.configure(text="◫ 对话模式")
         else:
-            self.char_stage.place_forget()
-            self.log_frame.place(relx=0.365, rely=0.095, relwidth=0.62, relheight=0.885)
-            self.btn_toggle_char.configure(text="✦ 展开立绘")
+            # 经典 Galgame 对话模式：人物立于右侧背景中，日志居中，层次分明
+            self.log_frame.place(relx=0.372, rely=0.090, relwidth=0.368, relheight=0.892)
+            self.char_overlay.place(relx=0.750, rely=0.090, relwidth=0.235, relheight=0.892)
+            self.btn_toggle_layout.configure(text="⛶ 宽屏")
 
-    def _toggle_char_stage(self):
-        self._char_visible = not self._char_visible
-        self._update_panel_layout()
+    def _toggle_wide_log(self):
+        self._wide_log = not self._wide_log
+        self._apply_layout()
 
-    def _render_char_portrait(self):
-        """在立绘 Canvas 中高质量平滑渲染美少女插画"""
-        if not self._char_visible or self._destroyed:
-            return
-        cw = self.char_cv.winfo_width()
-        ch = self.char_cv.winfo_height()
-        if cw < 30 or ch < 30:
-            return
-
-        src_path = ASSET_CHAR if os.path.exists(ASSET_CHAR) else ASSET_BG
-        if not os.path.exists(src_path):
-            return
-
-        try:
-            im = Image.open(src_path).convert("RGBA")
-            im_ratio = im.width / im.height
-            target_ratio = cw / ch
-
-            if im_ratio > target_ratio:
-                new_w = int(im.height * target_ratio)
-                crop_x = int((im.width - new_w) * 0.5)
-                im = im.crop((crop_x, 0, crop_x + new_w, im.height))
-            else:
-                new_h = int(im.width / target_ratio)
-                im = im.crop((0, 0, im.width, new_h))
-
-            im = im.resize((cw, ch), Image.Resampling.LANCZOS)
-            self._char_photo = ImageTk.PhotoImage(im)
-            self.char_cv.delete("all")
-            self.char_cv.create_image(0, 0, image=self._char_photo, anchor="nw")
-        except Exception:
-            pass
-
-    def _on_char_click(self, ev):
-        """点击立绘触发二次元专属互动语音台词"""
+    def _on_char_touch(self):
+        """互动语音台词"""
         quotes = [
             "✨ 影华：「主人，今天的选课战场，就交由我为您扫清障碍吧！」",
             "🔮 影华：「时刻注视着湘大教务系统的魔力流向，任何漏网之课都逃不过我的眼睛。」",
@@ -763,6 +748,7 @@ class App(ctk.CTk):
             self._log(f"✨ 教务回路连接成功: tabs={list(self.client.tabs)} "
                       f"rwlx={self.client._h('rwlx') or '?'} "
                       f"xklc={self.client._h('xklc') or '?'}", "ok")
+            self.lbl_stat_conn.configure(text="● 教务回路: 契约已连通", text_color=OK)
             try:
                 rows = self.client.get_choosed()
                 self.choosed_rows = rows
@@ -771,6 +757,7 @@ class App(ctk.CTk):
                     self.busy_slots += parse_sksj(r.get("sksj") or "")
                 self._log(f"📚 已选课捕获: 共 {len(rows)} 门，占用时间槽 {len(self.busy_slots)} 段 "
                           f"（作为避冲基准）", "ok")
+                self.lbl_stat_choosed.configure(text=f"● 已选基准: {len(rows)} 门 ({len(self.busy_slots)}段避冲槽)", text_color=OK)
             except Exception as e:
                 self._log(f"⚠️ 已选课获取遇到轻微阻碍: {e}", "warn")
             self.btn_start.configure(state="normal")
@@ -778,6 +765,7 @@ class App(ctk.CTk):
         except Exception as e:
             self._log(f"❌ 连接失败: {e}", "err")
             self._status("回路阻断 · 失败", ERR)
+            self.lbl_stat_conn.configure(text="● 教务回路: 阻断异常", text_color=ERR)
         finally:
             self._running_connect = False
             self.btn_conn.configure(state="normal")
@@ -792,6 +780,7 @@ class App(ctk.CTk):
             snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log, detail=True)
             self.snapshot = snap
             self._log(f"✨ 全表解析完成: 共捕获 {len(snap)} 门课程（类别 {kklxdms}）", "ok")
+            self.lbl_stat_snap.configure(text=f"● 全表缓存: 已就绪 ({len(snap)} 门)", text_color=OK)
         except Exception as e:
             self._log(f"❌ 抓取失败: {e}", "err")
 
