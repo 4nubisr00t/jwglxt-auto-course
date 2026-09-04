@@ -112,6 +112,17 @@ def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
     ws_url = wait_devtools(profile_dir, timeout=30)
     if not ws_url:
         raise RuntimeError("Chrome 启动超时（30s）")
+    # 确认调试端口已可连接：刚启动时端口文件先于监听就绪，
+    # 直接返回会让上层首次 websocket 连接撞上竞态窗口。
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            websocket.create_connection(ws_url, timeout=3,
+                                        suppress_origin=True).close()
+            return ws_url
+        except Exception:
+            time.sleep(0.5)
+    raise RuntimeError("Chrome 已启动但调试端口暂不可达")
     return ws_url
 
 
