@@ -71,8 +71,9 @@ LOG_COLOR = {
     "star": ACCENT2, "magic": ACCENT, "dim": DIM, "head": "#ffa8c9",
     "ruby": CRIMSON,
 }
-TAG_FONT = "Microsoft YaHei UI"
-MONO_FONT = "Cascadia Mono"
+TAG_FONT = "幼圆"
+TITLE_FONT = "华文琥珀"
+MONO_FONT = "幼圆"
 
 
 class NightSky:
@@ -365,14 +366,14 @@ class App(ctk.CTk):
         head = ctk.CTkFrame(outer, fg_color="transparent")
         head.pack(fill="x", padx=10, pady=(2, 2))
         ctk.CTkLabel(head, text=icon, text_color=ACCENT,
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
         ctk.CTkLabel(head, text=f" {title}", text_color=TEXT,
-                     font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=13, weight="bold")).pack(side="left")
         ctk.CTkLabel(head, text="✧ · ✧", text_color=LINE_GLOW,
                      font=ctk.CTkFont(size=9)).pack(side="right")
         return outer
 
-    def _btn(self, parent, text, cmd, color=None, height=30, border=None, bold=False):
+    def _btn(self, parent, text, cmd, color=None, height=32, border=None, bold=False):
         fg = color or CARD3
         hv = ACCENT_HOVER if color == ACCENT else CARD_HOVER
         tc = "#1c0915" if color == ACCENT else TEXT
@@ -382,7 +383,7 @@ class App(ctk.CTk):
                           border_color=border or LINE,
                           corner_radius=8,
                           text_color=tc,
-                          font=ctk.CTkFont(family=TAG_FONT, size=11,
+                          font=ctk.CTkFont(family=TAG_FONT, size=13,
                                            weight="bold" if bold else "normal"))
         b.pack(fill="x", padx=8, pady=2)
         return b
@@ -399,27 +400,27 @@ class App(ctk.CTk):
 
         # 左侧 LOGO 与徽章
         ctk.CTkLabel(head, text="❖", text_color=CRIMSON,
-                     font=ctk.CTkFont(size=18, weight="bold")
+                     font=ctk.CTkFont(size=20, weight="bold")
                      ).place(relx=0.015, rely=0.5, anchor="w")
         ctk.CTkLabel(head, text="JWGLXT", text_color=TEXT,
-                     font=ctk.CTkFont(family=TAG_FONT, size=16, weight="bold")
-                     ).place(relx=0.042, rely=0.5, anchor="w")
+                     font=ctk.CTkFont(family=TITLE_FONT, size=21)
+                     ).place(relx=0.045, rely=0.5, anchor="w")
         ctk.CTkLabel(head, text="AUTO", text_color=ACCENT,
-                     font=ctk.CTkFont(family=TAG_FONT, size=16, weight="bold")
-                     ).place(relx=0.145, rely=0.5, anchor="w")
+                     font=ctk.CTkFont(family=TITLE_FONT, size=21)
+                     ).place(relx=0.155, rely=0.5, anchor="w")
         ctk.CTkLabel(head, text="「 湘大选课 · 漆黑结界 」", text_color=ACCENT2,
-                     font=ctk.CTkFont(family=TAG_FONT, size=11)
-                     ).place(relx=0.22, rely=0.5, anchor="w")
+                     font=ctk.CTkFont(family=TAG_FONT, size=13)
+                     ).place(relx=0.25, rely=0.5, anchor="w")
 
         # 中部副标
         ctk.CTkLabel(head, text="— ✧ 漆黑之誓 · 自动选课系统 ✧ —", text_color=DIM,
-                     font=ctk.CTkFont(family=TAG_FONT, size=11)
-                     ).place(relx=0.52, rely=0.5, anchor="center")
+                     font=ctk.CTkFont(family=TAG_FONT, size=13)
+                     ).place(relx=0.54, rely=0.5, anchor="center")
 
         # 右侧状态指示灯
         self.status_lbl = ctk.CTkLabel(
             head, text="○ [结界休眠 · 未连接]", text_color=DIM,
-            font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold")
+            font=ctk.CTkFont(family=TAG_FONT, size=14, weight="bold")
         )
         self.status_lbl.place(relx=0.98, rely=0.5, anchor="e")
 
@@ -445,14 +446,14 @@ class App(ctk.CTk):
         self.btn_crawl = ctk.CTkButton(
             r1, text="📜 抓取全表", command=self.crawl, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
-            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.btn_crawl.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
         self.btn_view = ctk.CTkButton(
             r1, text="🔍 班次透镜", command=self.open_class_view, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
-            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.btn_view.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
@@ -462,14 +463,14 @@ class App(ctk.CTk):
         self.btn_tfilter = ctk.CTkButton(
             r2, text="⏳ 时段筛课", command=self.open_time_filter, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
-            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.btn_tfilter.pack(side="left", fill="x", expand=True, padx=(0, 3))
 
         self.btn_check = ctk.CTkButton(
             r2, text="⚡ 链路自检", command=self.selfcheck, height=28,
             fg_color=CARD3, hover_color=CARD_HOVER, corner_radius=8,
-            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.btn_check.pack(side="left", fill="x", expand=True, padx=(3, 0))
 
@@ -477,7 +478,7 @@ class App(ctk.CTk):
         self.btn_verify = ctk.CTkButton(
             c1, text="🗝 CDP 会话凭据验证", command=self.verify, height=24,
             fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=7,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10)
+            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
         self.btn_verify.pack(fill="x", padx=8, pady=(2, 4))
 
@@ -486,7 +487,7 @@ class App(ctk.CTk):
         self.kw = ctk.CTkEntry(
             c2, placeholder_text="输入课程关键词 (空格分隔，如: 敦煌 光影)",
             height=30, fg_color=CARD2, border_color=LINE, text_color=TEXT,
-            font=ctk.CTkFont(family=TAG_FONT, size=11)
+            font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.kw.pack(fill="x", padx=8, pady=(2, 4))
 
@@ -507,19 +508,19 @@ class App(ctk.CTk):
         pr.pack(fill="x", padx=8, pady=(1, 2))
 
         ctk.CTkLabel(pr, text="轮询(s)", text_color=DIM,
-                     font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
         self.interval = ctk.CTkEntry(
             pr, width=52, height=26, fg_color=CARD2, border_color=LINE,
-            text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=11)
+            text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=12)
         )
         self.interval.insert(0, "1.5")
         self.interval.pack(side="left", padx=(4, 12))
 
         ctk.CTkLabel(pr, text="超时(s)", text_color=DIM,
-                     font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
         self.timeout = ctk.CTkEntry(
             pr, width=62, height=26, fg_color=CARD2, border_color=LINE,
-            text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=11)
+            text_color=TEXT, corner_radius=7, font=ctk.CTkFont(size=12)
         )
         self.timeout.insert(0, "1800")
         self.timeout.pack(side="left", padx=4)
@@ -529,7 +530,7 @@ class App(ctk.CTk):
         self.dry_sw = ctk.CTkSwitch(
             swrow, text="预演模式", progress_color=ACCENT, border_width=1,
             border_color=LINE, fg_color=CARD3, button_color=ACCENT,
-            button_hover_color=ACCENT_HOVER, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            button_hover_color=ACCENT_HOVER, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.dry_sw.pack(side="left")
         self.dry_sw.select()
@@ -537,7 +538,7 @@ class App(ctk.CTk):
         self.cpx_sw = ctk.CTkSwitch(
             swrow, text="组合实践", progress_color=ACCENT, border_width=1,
             border_color=LINE, fg_color=CARD3, button_color=ACCENT,
-            button_hover_color=ACCENT_HOVER, font=ctk.CTkFont(family=TAG_FONT, size=11)
+            button_hover_color=ACCENT_HOVER, font=ctk.CTkFont(family=TAG_FONT, size=12)
         )
         self.cpx_sw.pack(side="left", padx=(14, 0))
 
@@ -548,19 +549,19 @@ class App(ctk.CTk):
 
         self.lbl_stat_conn = ctk.CTkLabel(
             stat_box, text="● 教务回路: 待同步", text_color=DIM,
-            font=ctk.CTkFont(family=TAG_FONT, size=10)
+            font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
         self.lbl_stat_conn.pack(anchor="w")
 
         self.lbl_stat_choosed = ctk.CTkLabel(
             stat_box, text="● 已选基准: 0 门课 (0段避冲槽)", text_color=DIM,
-            font=ctk.CTkFont(family=TAG_FONT, size=10)
+            font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
         self.lbl_stat_choosed.pack(anchor="w")
 
         self.lbl_stat_snap = ctk.CTkLabel(
             stat_box, text="● 全表缓存: 待抓取", text_color=DIM,
-            font=ctk.CTkFont(family=TAG_FONT, size=10)
+            font=ctk.CTkFont(family=TAG_FONT, size=11)
         )
         self.lbl_stat_snap.pack(anchor="w")
 
@@ -603,7 +604,7 @@ class App(ctk.CTk):
         self.btn_clear_log = ctk.CTkButton(
             self.log_tool, text="清空", width=46, height=22,
             fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
+            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=11),
             command=self._clear_log
         )
         self.btn_clear_log.pack(side="right", padx=(4, 6), pady=4)
@@ -611,14 +612,14 @@ class App(ctk.CTk):
         self.btn_toggle_layout = ctk.CTkButton(
             self.log_tool, text="⛶ 宽屏", width=52, height=22,
             fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
+            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=11),
             command=self._toggle_wide_log
         )
         self.btn_toggle_layout.pack(side="right", pady=4)
 
         self.log_lines = []        # [(text, tag), ...]
         self.log_offset = 0        # 滚动偏移（px，0=最新）
-        self.log_line_h = 21
+        self.log_line_h = 28
         self.log_max_lines = 500
         self.log_area = None       # (x0, y0, x1, y1) 像素区
 
@@ -643,7 +644,7 @@ class App(ctk.CTk):
             self.char_overlay, text="✧ 触碰微光 ✧", height=24, width=88,
             fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=10,
             border_width=1, border_color=LINE, text_color=ACCENT2,
-            font=ctk.CTkFont(family=TAG_FONT, size=10),
+            font=ctk.CTkFont(family=TAG_FONT, size=11),
             command=self._on_char_touch
         )
         self.char_touch.pack(side="bottom", anchor="se", padx=14, pady=12)
@@ -701,8 +702,8 @@ class App(ctk.CTk):
         max_off = max(0, total_h - avail_h)
         off = min(max(0, self.log_offset), max_off)
         start = int(off // self.log_line_h)
-        max_ch = max(12, int((x1 - x0 - 30) / 7.3))
-        fnt = (MONO_FONT, 11)
+        max_ch = max(12, int((x1 - x0 - 30) / 8.8))
+        fnt = (MONO_FONT, 13)
         for i in range(start, min(len(self.log_lines), start + max_show + 2)):
             text, tag = self.log_lines[i]
             col = LOG_COLOR.get(tag, DIM)
@@ -822,13 +823,11 @@ class App(ctk.CTk):
                 cv.create_line(sx - 3, sy, sx + 3, sy, fill=ACCENT2, width=1)
                 cv.create_line(sx, sy - 3, sx, sy + 3, fill=ACCENT2, width=1)
 
-                # 图标与文字：大字号、高对比
-                cv.create_text(cx, cy - 8, text=self.cat_icons[k],
-                               fill=ACCENT,
-                               font=("Microsoft YaHei UI", 12, "bold"))
-                cv.create_text(cx, cy + 9, text=name,
+                # 手绘图标 + 文字（幼圆大字号）
+                self._draw_tab_icon(cv, cx, cy - 10, k, True)
+                cv.create_text(cx, cy + 10, text=name,
                                fill="#ffffff",
-                               font=("Microsoft YaHei UI", 10, "bold"))
+                               font=(TAG_FONT, 11, "bold"))
             else:
                 # 未选中态：熄灭暗孔
                 gem_x = x1 - 9
@@ -836,14 +835,41 @@ class App(ctk.CTk):
                 cv.create_oval(gem_x - 3, gem_y - 3, gem_x + 3, gem_y + 3,
                                fill="#1d1630", outline="#3c3258")
 
-                cv.create_text(cx, cy - 8, text=self.cat_icons[k],
-                               fill="#7f759e",
-                               font=("Microsoft YaHei UI", 11))
-                cv.create_text(cx, cy + 9, text=name,
+                self._draw_tab_icon(cv, cx, cy - 10, k, False)
+                cv.create_text(cx, cy + 10, text=name,
                                fill="#8f84af",
-                               font=("Microsoft YaHei UI", 10))
+                               font=(TAG_FONT, 10))
 
             self.cat_geo.append((x0, y0, x1, y1, k))
+
+    def _draw_tab_icon(self, cv, cx, cy, k, on):
+        """手绘风格小图标：樱花 / 四角星 / 书本（带描边，去字库感）"""
+        col = "#ff77a9" if on else "#7f759e"
+        out = "#a83e6b" if on else "#4a4168"
+        if k == "10":   # 樱花：五瓣小椭圆 + 中心花蕊
+            for i in range(5):
+                ang = math.radians(i * 72 - 90)
+                px = cx + 6.8 * math.cos(ang)
+                py = cy + 6.8 * math.sin(ang)
+                cv.create_oval(px - 2.6, py - 1.9, px + 2.6, py + 1.9,
+                               fill=col, outline=out, width=1)
+            cv.create_oval(cx - 1.3, cy - 1.3, cx + 1.3, cy + 1.3,
+                           fill="#ffd8a8", outline="")
+        elif k == "11":  # 四角星符（魔法感）
+            pts = []
+            for i in range(8):
+                ang = math.radians(i * 45)
+                r = 7.8 if i % 2 == 0 else 3.4
+                pts += [cx + r * math.cos(ang), cy + r * math.sin(ang)]
+            cv.create_polygon(pts, fill=col, outline=out, width=1)
+        else:            # 书本（主修）：打开的两页
+            cv.create_polygon(cx - 7.5, cy - 4.5, cx - 0.6, cy - 5.0,
+                              cx - 0.6, cy + 5.2, cx - 7.5, cy + 4.6,
+                              fill=col, outline=out, width=1)
+            cv.create_polygon(cx + 0.6, cy - 5.0, cx + 7.5, cy - 4.5,
+                              cx + 7.5, cy + 4.6, cx + 0.6, cy + 5.2,
+                              fill=col, outline=out, width=1)
+            cv.create_line(cx, cy - 5.0, cx, cy + 5.2, fill=out, width=1)
 
     def _on_cat_click(self, ev):
         for x0, y0, x1, y1, k in getattr(self, "cat_geo", []):
@@ -978,7 +1004,7 @@ class App(ctk.CTk):
         ).pack(side="left")
         ctk.CTkLabel(
             bar_inner, text="✧ 命运观测仪 ✧", text_color=ACCENT2,
-            font=ctk.CTkFont(family=TAG_FONT, size=11)
+            font=ctk.CTkFont(family=TAG_FONT, size=12)
         ).pack(side="right")
 
         # 结果内容框
