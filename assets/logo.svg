@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 结界夜空背景径向渐变 -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2a143d" />
+      <stop offset="60%" stop-color="#12091c" />
+      <stop offset="100%" stop-color="#07040d" />
+    </radialGradient>
+
+    <!-- 霓虹樱粉渐变 -->
+    <linearGradient id="sakuraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9ec4" />
+      <stop offset="50%" stop-color="#ff77a9" />
+      <stop offset="100%" stop-color="#ff2b5e" />
+    </linearGradient>
+
+    <!-- 星辉浅紫渐变 -->
+    <linearGradient id="runeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0d4ff" />
+      <stop offset="50%" stop-color="#b388ff" />
+      <stop offset="100%" stop-color="#6f42c1" />
+    </linearGradient>
+
+    <!-- 猩红魔眼辉光 -->
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="30%" stop-color="#ff9ec4" />
+      <stop offset="70%" stop-color="#ff2b5e" />
+      <stop offset="100%" stop-color="#ff2b5e" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- 外发光滤镜 -->
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="strongGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 1. 圆角应用底座背景 -->
+  <rect x="16" y="16" width="480" height="480" rx="108" fill="url(#bgGlow)" stroke="#3a2360" stroke-width="4" />
+  <rect x="24" y="24" width="464" height="464" rx="100" fill="none" stroke="#5d3988" stroke-width="1.5" stroke-dasharray="12,8" opacity="0.6" />
+
+  <!-- 2. 外层魔导结界光环与刻度符文 -->
+  <g filter="url(#neonGlow)">
+    <circle cx="256" cy="256" r="190" fill="none" stroke="url(#runeGrad)" stroke-width="3" opacity="0.85" />
+    <circle cx="256" cy="256" r="176" fill="none" stroke="#ff77a9" stroke-width="1.5" stroke-dasharray="6,14" opacity="0.7" />
+    <circle cx="256" cy="256" r="162" fill="none" stroke="url(#runeGrad)" stroke-width="2" opacity="0.6" />
+  </g>
+
+  <!-- 3. 十二芒结界星芒射线与外围定位菱晶 -->
+  <g stroke="#b388ff" stroke-width="1.5" opacity="0.75">
+    <line x1="256" y1="46" x2="256" y2="94" stroke="#ff77a9" stroke-width="2.5" />
+    <line x1="256" y1="418" x2="256" y2="466" stroke="#ff77a9" stroke-width="2.5" />
+    <line x1="46" y1="256" x2="94" y2="256" stroke="#ff77a9" stroke-width="2.5" />
+    <line x1="418" y1="256" x2="466" y2="256" stroke="#ff77a9" stroke-width="2.5" />
+
+    <line x1="108" y1="108" x2="142" y2="142" />
+    <line x1="404" y1="404" x2="370" y2="370" />
+    <line x1="404" y1="108" x2="370" y2="142" />
+    <line x1="108" y1="404" x2="142" y2="370" />
+  </g>
+
+  <!-- 4. 四向定位魔导星钻 -->
+  <g fill="url(#sakuraGrad)" filter="url(#neonGlow)">
+    <polygon points="256,36 264,54 256,72 248,54" />
+    <polygon points="256,440 264,458 256,476 248,458" />
+    <polygon points="36,256 54,264 72,256 54,248" />
+    <polygon points="440,256 458,264 476,256 458,248" />
+  </g>
+
+  <!-- 5. 核心：双重八角星魔法阵（正八角星 + 交叉四芒星） -->
+  <g filter="url(#strongGlow)">
+    <!-- 45度旋转方块 -->
+    <rect x="156" y="156" width="200" height="200" rx="14" fill="none" stroke="url(#runeGrad)" stroke-width="2.5" transform="rotate(45 256 256)" opacity="0.8" />
+    <!-- 正方块 -->
+    <rect x="156" y="156" width="200" height="200" rx="14" fill="none" stroke="#ff77a9" stroke-width="2.5" opacity="0.8" />
+  </g>
+
+  <!-- 6. 核心魔导徽标：立体交叠的「JW」魔晶刃 + 破晓飞梭「AUTO」-->
+  <g filter="url(#strongGlow)">
+    <!-- 猩红教务魔晶菱核 -->
+    <polygon points="256,128 328,256 256,384 184,256" fill="url(#bgGlow)" stroke="url(#sakuraGrad)" stroke-width="4" />
+    <polygon points="256,152 308,256 256,360 204,256" fill="#1b0c26" stroke="#b388ff" stroke-width="2" />
+
+    <!-- 契约之剑 / 魔法光刃（象征极速精准狙击抢课） -->
+    <!-- 剑刃垂直主轴 -->
+    <path d="M 256,108 L 268,230 L 256,404 L 244,230 Z" fill="url(#sakuraGrad)" />
+    <!-- 剑格横向光翼 -->
+    <path d="M 172,246 L 256,236 L 340,246 L 256,266 Z" fill="url(#runeGrad)" opacity="0.95" />
+    <!-- 光翼核心符石 -->
+    <circle cx="256" cy="256" r="32" fill="url(#coreGlow)" />
+    <circle cx="256" cy="256" r="16" fill="#ffffff" />
+  </g>
+
+  <!-- 7. 环绕飘落的魔能樱花花瓣 -->
+  <g fill="#ff9ec4" opacity="0.9" filter="url(#neonGlow)">
+    <!-- 花瓣 1 -->
+    <path d="M 148,168 C 142,154 158,142 168,154 C 178,166 162,178 148,168 Z" transform="rotate(-25 158 161)" />
+    <!-- 花瓣 2 -->
+    <path d="M 358,162 C 352,148 368,136 378,148 C 388,160 372,172 358,162 Z" transform="rotate(35 368 155)" />
+    <!-- 花瓣 3 -->
+    <path d="M 344,352 C 338,338 354,326 364,338 C 374,350 358,362 344,352 Z" transform="rotate(-15 354 345)" />
+    <!-- 花瓣 4 -->
+    <path d="M 160,344 C 154,330 170,318 180,330 C 190,342 174,354 160,344 Z" transform="rotate(45 170 337)" />
+  </g>
+
+  <!-- 8. 微光星尘粒子 -->
+  <circle cx="210" cy="190" r="2.5" fill="#ffffff" filter="url(#neonGlow)" />
+  <circle cx="304" cy="200" r="3" fill="#ffe0ec" filter="url(#neonGlow)" />
+  <circle cx="198" cy="308" r="2" fill="#ffd8e8" filter="url(#neonGlow)" />
+  <circle cx="316" cy="312" r="2.5" fill="#ffffff" filter="url(#neonGlow)" />
+</svg>
