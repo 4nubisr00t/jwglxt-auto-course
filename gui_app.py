@@ -505,6 +505,10 @@ class App(ctk.CTk):
         self.btn_stop.pack(fill="x", padx=8, pady=(0, 6))
         self.btn_stop.configure(state="disabled")
 
+        # 弹性撑满：吸收剩余高度，避免全屏时左栏底部留白
+        spacer = ctk.CTkFrame(self.left_frame, fg_color="transparent", height=1)
+        spacer.pack(fill="both", expand=True)
+
         # 4. 中栏：Galgame 对话框风格实时日志终端
         self.log_frame = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
                                       border_width=1, border_color=LINE)
