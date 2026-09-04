@@ -258,7 +258,8 @@ class App(ctk.CTk):
         self._log("抓取课程全表...")
         try:
             kklxdms = sorted(self.client.tabs.keys())   # 全部类别（主修/体育/通识/特殊）
-            snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log)
+            snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log,
+                                            detail=True)
             self.snapshot = snap
             self._log(f"全表完成: {len(snap)} 门课程（类别 {kklxdms}）", "ok")
         except Exception as e:

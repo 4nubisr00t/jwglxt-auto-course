@@ -444,7 +444,11 @@ class JWClient:
         }
         r = self.s.post(self._u("/xsxk/zzxkyzbjk_cxJxbWithKchZzxkYzb.html"),
                         data=params, timeout=10)
-        return r.json()
+        data = r.json()
+        if not isinstance(data, list):
+            # 非选课窗口/受限课程等返回错误结构（dict/0），统一视作无班
+            raise RuntimeError(f"get_jxbs 异常响应: {str(data)[:120]}")
+        return data
 
     # -- 选课提交（单班 / 理论+实践多班：jxb_ids 逗号拼接） ---------------
     def submit(self, kch_id: str, jxb_ids: list, kcmc: str, kklxdm="10",

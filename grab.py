@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
@@ -29,8 +30,12 @@ def now():
     return time.strftime("%H:%M:%S")
 
 
-def fetch_full_snapshot(client, kklxdms, log=print):
-    """单次拉全表，返回 {kch_id: {kch, kcmc, jxbzls, xf, kklxdm, classes:[...]}}"""
+def fetch_full_snapshot(client, kklxdms, log=print, detail=False):
+    """单次拉全表，返回 {kch_id: {kch, kcmc, jxbzls, xf, kklxdm, classes:[...]}}。
+
+    detail=True 时逐课调用 get_jxbs 补全教学班详情（sksj/jxdd/jsxx/jxbrl），
+    供时段筛课 / 班次可视化使用；普通抢课无需 detail（保持轻量）。
+    """
     out = {}
     for kklxdm in kklxdms:
         rows, _ = client.search_courses(kklxdm, page=1, page_size=BIG_PAGE)
@@ -44,11 +49,38 @@ def fetch_full_snapshot(client, kklxdms, log=print):
             c["classes"].append({
                 "jxb_id": r.get("jxb_id"), "jxbmc": r.get("jxbmc"),
                 "yxzrs": r.get("yxzrs"), "cxbj": r.get("cxbj"),
-                "sksj": r.get("sksj") or "", "jxdd": r.get("jxdd") or "",
-                "jsxx": r.get("jsxx") or "",
-                "jxbrl": r.get("jxbrl") or "",
             })
         log(f"[{now()}] 类别 {kklxdm} 抓取完成: {len(rows)} 行")
+    if detail:
+        log(f"[{now()}] 补全 {len(out)} 门课的教学班详情（并发）...")
+        items = list(out.items())
+
+        def _fetch_one(item):
+            kch_id, c = item
+            try:
+                jxbs = client.get_jxbs(kch_id, c["kklxdm"])
+                if isinstance(jxbs, list):
+                    return kch_id, jxbs
+                return kch_id, []
+            except Exception:
+                return kch_id, []
+
+        done = 0
+        with ThreadPoolExecutor(max_workers=5) as ex:
+            for kch_id, jxbs in ex.map(_fetch_one, items):
+                done += 1
+                c = out[kch_id]
+                if jxbs:
+                    c["classes"] = [{
+                        "jxb_id": jb.get("jxb_id"), "jxbmc": jb.get("jxbmc"),
+                        "yxzrs": jb.get("yxzrs"), "cxbj": jb.get("cxbj"),
+                        "sksj": jb.get("sksj") or "",
+                        "jxdd": jb.get("jxdd") or "",
+                        "jsxx": jb.get("jsxx") or "",
+                        "jxbrl": jb.get("jxbrl") or "",
+                    } for jb in jxbs]
+                if done % 25 == 0 or done == len(out):
+                    log(f"    补全中 {done}/{len(out)}")
     return out
 
 
