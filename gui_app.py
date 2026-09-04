@@ -34,8 +34,8 @@ except Exception:
 
 # ---------------- 路径配置 ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-ASSET_BG = os.path.join(ASSETS_DIR, "bg_anime.jpg")
+ASSET_BG = os.path.join(BASE_DIR, "assets", "bg_main.jpg")
+
 
 # ---------------- 二次元主题（深渊暗夜紫 × 绯红魔眼 × 樱花粉 × 星辉紫） ----------------
 BG = "#0c0a17"          # 深渊暗夜黑紫
@@ -66,12 +66,17 @@ LV_COLOR = {
     "dim": DIM,
     "head": "#ffa8c9",
 }
+LOG_COLOR = {
+    "t": "#786c99", "info": TEXT, "ok": OK, "warn": WARN, "err": ERR,
+    "star": ACCENT2, "magic": ACCENT, "dim": DIM, "head": "#ffa8c9",
+    "ruby": CRIMSON,
+}
 TAG_FONT = "Microsoft YaHei UI"
 MONO_FONT = "Cascadia Mono"
 
 
 class NightSky:
-    """二次元夜空背景画布：PIL 插画背景 + 飘落樱花 + 闪烁星辰 + 结界微光"""
+    """二次元夜空背景画布：背景插画 + 灵动画粒子（无图时降级为手绘夜空与剪影）"""
 
     def __init__(self, canvas):
         self.cv = canvas
@@ -90,6 +95,22 @@ class NightSky:
             except Exception:
                 self.orig_bg = None
 
+    @staticmethod
+    def _cover(img, w, h):
+        """右对齐 cover 裁剪 + 缩放：优先保住右侧人物。"""
+        iw, ih = img.size
+        iar = iw / ih
+        tar = w / h
+        if iar > tar:
+            nw = int(ih * tar)
+            x0 = max(0, iw - nw)      # 保留右侧
+            img = img.crop((x0, 0, x0 + nw, ih))
+        else:
+            nh = int(iw / tar)
+            y0 = (ih - nh) // 2
+            img = img.crop((0, y0, iw, y0 + nh))
+        return img.resize((w, h), Image.Resampling.BILINEAR)
+
     def init(self, w, h):
         if self.destroyed or w <= 10 or h <= 10:
             return
@@ -97,16 +118,18 @@ class NightSky:
         self.h = h
         self.cv.delete("all")
 
-        # 1. 插画背景或程序化降级
         if self.orig_bg:
             try:
-                resized = self.orig_bg.resize((w, h), Image.Resampling.BILINEAR)
+                resized = self._cover(self.orig_bg, w, h)
                 self.bg_photo = ImageTk.PhotoImage(resized)
-                self.cv.create_image(0, 0, image=self.bg_photo, anchor="nw", tags="bg")
+                self.cv.create_image(0, 0, image=self.bg_photo,
+                                     anchor="nw", tags="bg")
             except Exception:
                 self._draw_procedural_bg(w, h)
+                self._draw_silhouette(w, h)
         else:
             self._draw_procedural_bg(w, h)
+            self._draw_silhouette(w, h)
 
         # 2. 星星粒子（上部 70% 区域闪烁）
         self.stars = []
@@ -154,27 +177,85 @@ class NightSky:
         )
 
     def _draw_procedural_bg(self, w, h):
-        """降级纯代码手绘：蓝紫渐变 + 星云 + 剪影"""
-        top = (12, 10, 23)
-        mid = (26, 18, 52)
-        bot = (48, 28, 80)
-        for i in range(0, h, 3):
+        """纯代码绘制夜空：多段渐变 + 星云 + 月光 + 远山剪影"""
+        # 1) 多段垂直渐变：深渊黑 → 暗夜紫 → 底部淡紫地平线
+        stops = [(0.00, (6, 5, 14)), (0.30, (15, 11, 32)),
+                 (0.62, (31, 20, 58)), (0.88, (52, 31, 76)),
+                 (1.00, (66, 40, 86))]
+        for i in range(0, h, 2):
             k = i / max(h, 1)
-            if k < 0.55:
-                kk = k / 0.55
-                c = tuple(int(top[j] + (mid[j] - top[j]) * kk) for j in range(3))
-            else:
-                kk = (k - 0.55) / 0.45
-                c = tuple(int(mid[j] + (bot[j] - mid[j]) * kk) for j in range(3))
+            for j in range(len(stops) - 1):
+                k0, c0 = stops[j]
+                k1, c1 = stops[j + 1]
+                if k0 <= k <= k1 or j == len(stops) - 2:
+                    kk = 0.0 if k1 == k0 else (k - k0) / (k1 - k0)
+                    c = tuple(int(c0[m] + (c1[m] - c0[m]) * kk) for m in range(3))
+                    break
             self.cv.create_line(0, i, w, i, fill="#%02x%02x%02x" % c)
 
-        # 星云光晕
-        blobs = [(0.72, 0.20, 0.35, "#382566"), (0.28, 0.30, 0.28, "#2d1e56"),
-                 (0.60, 0.70, 0.32, "#422358")]
-        for rx, ry, rr, col in blobs:
+        # 2) 星云光晕（低对比叠色，柔和远近感）
+        for rx, ry, rr, col in [
+            (0.14, 0.20, 0.30, "#2c1e5c"), (0.74, 0.16, 0.26, "#3a2360"),
+            (0.38, 0.60, 0.34, "#3d2050"), (0.86, 0.82, 0.20, "#461c48"),
+        ]:
             self.cv.create_oval(w * rx - w * rr, h * ry - h * rr,
                                 w * rx + w * rr, h * ry + h * rr,
                                 fill=col, outline="")
+
+        # 3) 月亮（右上角：月白主体 + 淡紫光环晕）
+        mx, my = w * 0.855, h * 0.16
+        mr = min(w, h) * 0.030
+        for k, col in [(3.4, "#3c3762"), (2.6, "#4e477c"), (1.8, "#6f689c"),
+                       (1.15, "#bdb6d8"), (0.8, "#f0ecff")]:
+            self.cv.create_oval(mx - mr * k, my - mr * k, mx + mr * k,
+                                my + mr * k, fill=col, outline="")
+        # 月面淡淡纹理
+        self.cv.create_oval(mx - mr * 0.25, my - mr * 0.15, mx + mr * 0.1,
+                            my + mr * 0.2, fill="#d8d2ee", outline="")
+
+        # 4) 远山剪影（底部起伏）
+        rnd = random.Random(7)
+        pts = [(0, h)]
+        seg = int(w / 26)
+        y = h * 0.90
+        for x in range(0, w + seg, seg):
+            y += rnd.uniform(-18, 18)
+            y = max(h * 0.80, min(h * 0.97, y))
+            pts.append((x, y))
+        pts.append((w, h))
+        self.cv.create_polygon(pts, fill="#0b0817", outline="")
+        # 山脊后一抹淡粉余光
+        self.cv.create_line(0, h * 0.905, w, h * 0.885, fill="#3a1f3a", width=1)
+
+    def _draw_silhouette(self, w, h):
+        """右下角：黑长直少女背影剪影（原创手绘线条，红眼微光）"""
+        cx = w - w * 0.078
+        base_y = h - 6
+        body = "#080612"
+        # 长发垂落（多根粗曲线，发量感）
+        strands = [
+            (0.00, -214, 0.04, -82, 32, 0), (0.27, -198, 0.32, -64, 23, 0),
+            (-0.30, -200, -0.35, -58, 19, 0), (-0.45, -184, -0.49, -38, 14, 0),
+            (0.46, -186, 0.53, -42, 12, 0), (-0.12, -216, -0.10, -98, 10, 0),
+            (0.14, -212, 0.17, -86, 9, 0),
+        ]
+        for dx1, dy1, dx2, dy2, width, _ in strands:
+            self.cv.create_line(cx + dx1, base_y + dy1, cx + dx2, base_y + dy2,
+                                fill=body, width=width, capstyle="round")
+        # 身体背影（窄腰裙摆）
+        self.cv.create_polygon(cx - 17, base_y - 122, cx + 17, base_y - 122,
+                               cx + 26, base_y - 14, cx - 26, base_y - 14,
+                               fill=body, outline="")
+        # 头
+        self.cv.create_oval(cx - 14, base_y - 160, cx + 14, base_y - 132,
+                            fill=body, outline="")
+        # 一缕绯红魔眼微光（侧脸露出）
+        self.cv.create_oval(cx + 9, base_y - 148, cx + 12.5, base_y - 144,
+                            fill="#ff2b5e", outline="#ff5c7a")
+        # 发梢一瓣樱花
+        for fx, fy in [(cx - 42, base_y - 32), (cx + 54, base_y - 30)]:
+            self.cv.create_oval(fx - 2.5, fy - 2, fx + 2.5, fy + 2,
+                                fill="#ff77a9", outline="#ffb3d1", width=1)
 
     def tick(self):
         """粒子动画循环"""
@@ -258,6 +339,7 @@ class App(ctk.CTk):
             self._sky = NightSky(self.sky)
             self._resize_sky()
             self.bind("<Configure>", self._on_resize)
+            self.sky.bind("<MouseWheel>", self._on_log_wheel)
             self.after(80, self._sky.tick)
 
     def _on_closing(self):
@@ -509,46 +591,36 @@ class App(ctk.CTk):
         self.btn_stop.pack(fill="x", padx=8, pady=(0, 6))
         self.btn_stop.configure(state="disabled")
 
-        # 4. 中栏：Galgame 对话框风格实时日志终端
-        self.log_frame = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
-                                      border_width=1, border_color=LINE)
-
-        # 终端卡片顶部工具条
-        log_head = ctk.CTkFrame(self.log_frame, fg_color="transparent")
-        log_head.pack(fill="x", padx=12, pady=(6, 4))
+        # 4. 中栏：实时日志终端（canvas 真透文字层，浮于星空背景之上）
+        self.log_tool = ctk.CTkFrame(self, fg_color=CARD, corner_radius=10,
+                                     border_width=1, border_color=LINE,
+                                     height=30)
         ctk.CTkLabel(
-            log_head, text="✧ 魂之回响 · 实时结界日志 ✧", text_color=ACCENT2,
+            self.log_tool, text="✧ 魂之回响 · 结界日志 ✧", text_color=ACCENT2,
             font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold")
-        ).pack(side="left")
-
-        self.btn_toggle_layout = ctk.CTkButton(
-            log_head, text="⛶ 宽屏", width=52, height=22,
-            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
-            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
-            command=self._toggle_wide_log
-        )
-        self.btn_toggle_layout.pack(side="right", padx=(4, 0))
+        ).pack(side="left", padx=(10, 6), pady=4)
 
         self.btn_clear_log = ctk.CTkButton(
-            log_head, text="清空", width=46, height=22,
+            self.log_tool, text="清空", width=46, height=22,
             fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
             text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
             command=self._clear_log
         )
-        self.btn_clear_log.pack(side="right")
+        self.btn_clear_log.pack(side="right", padx=(4, 6), pady=4)
 
-        self.log_box = ctk.CTkTextbox(
-            self.log_frame, fg_color="#100c1e", border_color=LINE,
-            border_width=1, corner_radius=10, wrap="none",
-            font=ctk.CTkFont(family=MONO_FONT, size=11),
-            text_color=TEXT
+        self.btn_toggle_layout = ctk.CTkButton(
+            self.log_tool, text="⛶ 宽屏", width=52, height=22,
+            fg_color=CARD2, hover_color=CARD_HOVER, corner_radius=6,
+            text_color=DIM, font=ctk.CTkFont(family=TAG_FONT, size=10),
+            command=self._toggle_wide_log
         )
-        self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.btn_toggle_layout.pack(side="right", pady=4)
 
-        for tag, color in LV_COLOR.items():
-            self.log_box.tag_config(tag, foreground=color)
-        self.log_box.tag_config("t", foreground="#786c99")
-        self.log_box.tag_config("ruby", foreground=CRIMSON)
+        self.log_lines = []        # [(text, tag), ...]
+        self.log_offset = 0        # 滚动偏移（px，0=最新）
+        self.log_line_h = 21
+        self.log_max_lines = 500
+        self.log_area = None       # (x0, y0, x1, y1) 像素区
 
         # 5. 右侧区域：美少女自然立于星空背景，上方悬浮优雅半透明信息胶囊（无突兀卡片框）
         self.char_overlay = ctk.CTkFrame(self, fg_color="transparent")
@@ -579,23 +651,86 @@ class App(ctk.CTk):
         self._apply_layout()
 
         # 初始欢迎辞
-        welcome_banner = "✧· ──────────────── ✦ 漆 黑 课 程 结 界 启 动 ✦ ──────────────── ·✧\n"
-        self.log_box.insert("end", welcome_banner, "t")
+        self._append_log("✧· ──────────────── ✦ 漆黑课程结界启动 ✦ ──────────────── ·✧", "t")
         self._log("✨ 欢迎回来，主人。湘潭大学自动化选课结界已就绪。", "ok")
         self._log("🔮 请先点击「❖ 连接教务系统」，随后「📜 抓取全表」，输入目标关键词开始狙击吧。")
 
     def _apply_layout(self):
-        """根据是否宽屏布局灵活排布日志框与右侧人物视窗"""
+        """根据是否宽屏布局灵活排布日志区与右侧人物视窗"""
         if self._wide_log:
             # 宽屏日志模式：覆盖右侧，方便审阅长表
             self.char_overlay.place_forget()
-            self.log_frame.place(relx=0.372, rely=0.090, relwidth=0.613, relheight=0.892)
+            lx, lw = 0.372, 0.613
             self.btn_toggle_layout.configure(text="◫ 对话模式")
         else:
             # 经典 Galgame 对话模式：人物立于右侧背景中，日志居中，层次分明
-            self.log_frame.place(relx=0.372, rely=0.090, relwidth=0.368, relheight=0.892)
-            self.char_overlay.place(relx=0.750, rely=0.090, relwidth=0.235, relheight=0.892)
+            lx, lw = 0.372, 0.368
+            self.char_overlay.place(relx=0.750, rely=0.090, relwidth=0.235,
+                                    relheight=0.892)
             self.btn_toggle_layout.configure(text="⛶ 宽屏")
+        self.log_tool.place(relx=lx, rely=0.056, relwidth=lw)
+        self._log_rx, self._log_rw = lx, lw
+        self._update_log_area(lx, lw)
+
+    def _update_log_area(self, rx, rw):
+        """由布局比例换算日志文字区的像素矩形。"""
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w < 100 or h < 100:
+            return
+        self.log_area = (int(w * rx) + 10, int(h * 0.090) + 36,
+                         int(w * (rx + rw)) - 10, int(h * 0.984) - 4)
+        self._draw_log()
+
+    def _draw_log(self):
+        """在星空画布上绘制日志文字层：网点半透明底 + 描边文字（真透）。"""
+        if not hasattr(self, "sky") or not self.log_area:
+            return
+        self.sky.delete("logbg")
+        self.sky.delete("logtxt")
+        x0, y0, x1, y1 = self.log_area
+        # 极淡网点底：透过它能看到背景插画与粒子
+        self.sky.create_rectangle(x0 - 2, y0 - 2, x1 + 2, y1 + 2,
+                                  fill="#0e0a1e", stipple="gray50",
+                                  outline="#382d5a", width=1, tags="logbg")
+        if not self.log_lines:
+            return
+        avail_h = y1 - y0 - 12
+        max_show = max(0, int(avail_h // self.log_line_h))
+        total_h = len(self.log_lines) * self.log_line_h
+        max_off = max(0, total_h - avail_h)
+        off = min(max(0, self.log_offset), max_off)
+        start = int(off // self.log_line_h)
+        max_ch = max(12, int((x1 - x0 - 30) / 7.3))
+        fnt = (MONO_FONT, 11)
+        for i in range(start, min(len(self.log_lines), start + max_show + 2)):
+            text, tag = self.log_lines[i]
+            col = LOG_COLOR.get(tag, DIM)
+            yy = y0 + 8 + (i * self.log_line_h - off)
+            disp = text if len(text) <= max_ch else text[:max_ch - 1] + "…"
+            self.sky.create_text(x0 + 14, yy + 1, text=disp, anchor="nw",
+                                 fill="#05040a", font=fnt, tags="logtxt")
+            self.sky.create_text(x0 + 14, yy, text=disp, anchor="nw",
+                                 fill=col, font=fnt, tags="logtxt")
+
+    def _append_log(self, text, tag="info"):
+        self.log_lines.append((text, tag))
+        if len(self.log_lines) > self.log_max_lines:
+            del self.log_lines[:len(self.log_lines) - self.log_max_lines]
+        self.log_offset = 0
+        self._draw_log()
+
+    def _on_log_wheel(self, ev):
+        """鼠标滚轮在日志区滚动历史，其余区域不干扰。"""
+        if not self.log_area or not self.log_lines:
+            return
+        x0, y0, x1, y1 = self.log_area
+        if x0 <= ev.x <= x1 and y0 <= ev.y <= y1:
+            total_h = len(self.log_lines) * self.log_line_h
+            max_off = max(0, total_h - (y1 - y0 - 12))
+            self.log_offset += -int(ev.delta) * 2
+            self.log_offset = max(0, min(self.log_offset, max_off))
+            self._draw_log()
 
     def _toggle_wide_log(self):
         self._wide_log = not self._wide_log
@@ -613,14 +748,17 @@ class App(ctk.CTk):
         self._log(random.choice(quotes), "star")
 
     def _clear_log(self):
-        self.log_box.delete("1.0", "end")
-        self.log_box.insert("end", "✧ 日志已清空 ✧\n", "t")
+        self.log_lines.clear()
+        self.log_offset = 0
+        self._append_log("✧ 日志已清空 ✧", "t")
 
     def _on_resize(self, ev):
         if ev.widget is self and tk is not None and not self._destroyed:
             cur = (self.winfo_width(), self.winfo_height())
             if cur != (self._last_w, self._last_h):
                 self._resize_sky()
+                if hasattr(self, "_log_rx"):
+                    self._update_log_area(self._log_rx, self._log_rw)
 
     def _resize_sky(self):
         if self._destroyed:
@@ -725,9 +863,7 @@ class App(ctk.CTk):
             while True:
                 text, level = self.log_q.get_nowait()
                 ts = time.strftime("%H:%M:%S")
-                self.log_box.insert("end", f"[{ts}] ", "t")
-                self.log_box.insert("end", text + "\n", level)
-                self.log_box.see("end")
+                self._append_log(f"[{ts}] {text}", level)
         except queue.Empty:
             pass
         if not self._destroyed:
