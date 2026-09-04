@@ -482,32 +482,32 @@ class App(ctk.CTk):
         )
         self.lbl_stat_snap.pack(anchor="w")
 
-        # ---- 操作主按钮（高亮大按钮 + 停止按钮） ----
+        # 弹性占位：把按钮组推到左栏底部，消除底部或中段大块留白
+        spacer = ctk.CTkFrame(self.left_frame, fg_color="transparent", height=1)
+        spacer.pack(fill="both", expand=True)
+
+        # ---- 操作主按钮（高度统一，主次靠颜色区分） ----
         self.btn_start = ctk.CTkButton(
-            self.left_frame, text="✦ 展开结界 · 启动抢课 ✦", height=40,
+            self.left_frame, text="✦ 展开结界 · 启动抢课 ✦", height=38,
             fg_color=ACCENT, hover_color=ACCENT_HOVER, corner_radius=10,
             border_width=1, border_color="#ffe0ec",
             text_color="#200a16",
             font=ctk.CTkFont(family=TAG_FONT, size=13, weight="bold"),
             command=self.start
         )
-        self.btn_start.pack(fill="x", padx=8, pady=(4, 3))
+        self.btn_start.pack(fill="x", padx=8, pady=(2, 3))
         self.btn_start.configure(state="disabled")
 
         self.btn_stop = ctk.CTkButton(
-            self.left_frame, text="✧ 撤除结界 · 停止 ✧", height=30,
+            self.left_frame, text="✧ 撤除结界 · 停止 ✧", height=38,
             fg_color="transparent", hover_color="#361726",
             border_width=1, border_color=ERR, text_color=ERR,
             corner_radius=8,
-            font=ctk.CTkFont(family=TAG_FONT, size=11, weight="bold"),
+            font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold"),
             command=self.stop
         )
         self.btn_stop.pack(fill="x", padx=8, pady=(0, 6))
         self.btn_stop.configure(state="disabled")
-
-        # 弹性撑满：吸收剩余高度，避免全屏时左栏底部留白
-        spacer = ctk.CTkFrame(self.left_frame, fg_color="transparent", height=1)
-        spacer.pack(fill="both", expand=True)
 
         # 4. 中栏：Galgame 对话框风格实时日志终端
         self.log_frame = ctk.CTkFrame(self, fg_color=CARD, corner_radius=14,
