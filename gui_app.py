@@ -411,7 +411,8 @@ class App(ctk.CTk):
                           win, days.index(day_menu.get()) + 1,
                           *map(int, seg_menu.get().split("-")))
                       ).pack(side="left")
-        win._box.insert("end", "选星期与节次后点「筛选」，列出该时段有课的课程与各班余量、冲突标记\n", "dim")
+        win._box.insert("end", "选星期与节次后点「筛选」：顶部列出该时段你已在上的课，"
+                                "下方列出未选的可用课程（含余量、冲突标记）\n", "dim")
 
     def _render_time_filter(self, win, day, a, b):
         box = win._box
@@ -437,8 +438,11 @@ class App(ctk.CTk):
                                    f"{slots_str(parse_sksj(r.get('sksj') or ''))}\n", "dim")
             box.insert("end", "\n")
 
+        choosed_ids = {r.get("kch_id") for r in self.choosed_rows}
         count = 0
         for kch_id, c in self.snapshot.items():
+            if kch_id in choosed_ids:
+                continue      # 已选的在顶部 ★ 区展示，不重复进可选列表
             matched = [cls for cls in c["classes"] if in_slot(cls)]
             if not matched:
                 continue
