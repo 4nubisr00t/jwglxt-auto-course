@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-JWGLXT Auto Course - GUI (customtkinter)
-=========================================
+JWGLXT Auto Course - GUI (customtkinter) 二次元主题版
+=====================================================
 双击运行或 python gui_app.py。依赖: pip install customtkinter
-逻辑层完全复用 grab.py，本文件只负责交互。
+逻辑层完全复用 grab.py / jw_cdp_client.py / schedule.py，本文件只负责交互与氛围。
 """
 import os
 import queue
+import random
 import sys
 import threading
 import time
+import math
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import grab
@@ -23,27 +25,181 @@ try:
 except Exception as e:  # 无显示环境/未安装时给出提示
     ctk = None
 
-# 主题（红黑）
-BG = "#0b0b0d"
-CARD = "#141419"
-CARD2 = "#1c1c23"
-TEXT = "#e8e8ea"
-DIM = "#8a8a93"
-LINE = "#26262f"
-ACCENT = "#ff2b2b"
-OK = "#38d489"
-WARN = "#ffb647"
-ERR = "#ff5252"
+try:
+    import tkinter as tk
+except Exception:
+    tk = None
 
-LV_COLOR = {"info": DIM, "ok": OK, "warn": WARN, "err": ERR, "star": ACCENT}
+# ---------------- 二次元主题（暗夜紫 × 樱花粉 × 星辉） ----------------
+BG = "#0d0b18"
+CARD = "#161226"
+CARD2 = "#221b36"
+CARD3 = "#2c2344"
+TEXT = "#f2eefb"
+DIM = "#a79fc9"
+LINE = "#3a3160"
+ACCENT = "#ff77a9"      # 樱花粉
+ACCENT2 = "#b388ff"     # 星辉紫
+OK = "#7ce7b8"
+WARN = "#ffc46b"
+ERR = "#ff5c7a"
+STAR_COLORS = ["#cfc4ff", "#ffffff", "#ffd7e8", "#b388ff", "#ffe9f2"]
+
+LV_COLOR = {"info": DIM, "ok": OK, "warn": WARN, "err": ERR, "star": ACCENT2}
+TAG_FONT = "Microsoft YaHei UI"
+MONO_FONT = "Cascadia Mono"
+
+
+class NightSky:
+    """canvas 二次元夜空：渐变 + 星云 + 闪烁星星 + 飘落樱花 + 少女剪影"""
+
+    def __init__(self, canvas):
+        self.cv = canvas
+        self.w = 0
+        self.h = 0
+        self.stars = []
+        self.petals = []
+        self._phase = 0
+
+    def init(self, w, h):
+        self.w = w
+        self.h = h
+        self.cv.delete("all")
+        self._draw_gradient(w, h)
+        self._draw_nebula(w, h)
+        self._draw_silhouette(w, h)
+        # 星星
+        self.stars = []
+        rnd = random.Random(42)
+        for _ in range(52):
+            x = rnd.uniform(0, w)
+            y = rnd.uniform(0, h * 0.94)
+            self.stars.append({
+                "id": self.cv.create_oval(x - 1, y - 1, x + 1, y + 1,
+                                          fill="#cfc4ff", outline=""),
+                "x": x, "y": y, "r": rnd.choice([1.0, 1.2, 1.6]),
+                "base": rnd.choice(STAR_COLORS),
+                "phase": rnd.uniform(0, math.tau),
+                "spd": rnd.uniform(1.2, 3.2),
+            })
+        # 樱花
+        self.petals = []
+        for _ in range(26):
+            p = self._new_petal(rnd)
+            p["id"] = self._petal_oval(p)
+            self.petals.append(p)
+
+    def _new_petal(self, rnd=None):
+        rnd = rnd or random
+        s = rnd.uniform(3.5, 6.5)
+        return {
+            "id": None,
+            "x": rnd.uniform(0, self.w), "y": rnd.uniform(-20, self.h),
+            "s": s, "v": rnd.uniform(0.6, 1.5),
+            "sway": rnd.uniform(0.4, 1.2), "rot": rnd.uniform(0, math.tau),
+            "col": rnd.choice(["#ff9ec4", "#ffb3d1", "#ff77a9", "#ffc9de"]),
+        }
+
+    def _petal_oval(self, p):
+        return self.cv.create_oval(
+            p["x"] - p["s"], p["y"] - p["s"] * 0.7,
+            p["x"] + p["s"], p["y"] + p["s"] * 0.7,
+            fill=p["col"], outline="")
+
+    def _draw_gradient(self, w, h):
+        top = (9, 8, 22)
+        mid = (24, 16, 50)
+        bot = (46, 26, 78)
+        for i in range(0, h, 2):
+            k = i / h
+            if k < 0.55:
+                kk = k / 0.55
+                c = tuple(int(top[j] + (mid[j] - top[j]) * kk) for j in range(3))
+            else:
+                kk = (k - 0.55) / 0.45
+                c = tuple(int(mid[j] + (bot[j] - mid[j]) * kk) for j in range(3))
+            self.cv.create_line(0, i, w, i, fill="#%02x%02x%02x" % c)
+
+    def _draw_nebula(self, w, h):
+        # 几团朦胧的星云光晕（低对比叠色）
+        blobs = [(0.72, 0.20, 0.34, "#3a2a66"), (0.28, 0.30, 0.26, "#2c2052"),
+                 (0.55, 0.75, 0.30, "#402252"), (0.85, 0.62, 0.22, "#4a1f3f")]
+        for rx, ry, rr, col in blobs:
+            self.cv.create_oval(w * rx - w * rr, h * ry - h * rr,
+                                w * rx + w * rr, h * ry + h * rr,
+                                fill=col, outline="")
+        # 樱花粉微光晕
+        for rx, ry, rr in [(0.80, 0.18, 0.07)]:
+            self.cv.create_oval(w * rx - w * rr, h * ry - h * rr,
+                                w * rx + w * rr, h * ry + h * rr,
+                                fill="#5c2a4a", outline="")
+
+    def _draw_silhouette(self, w, h):
+        """右下角：黑长直少女背影剪影 + 一缕红眼微光"""
+        cx = w - w * 0.085
+        base_y = h - 8
+        body = "#0a0814"
+        # 长发主体（垂落的曲线）
+        strands = [
+            (0.0, -198, 0.0, -74, 26, 0), (0.16, -184, 0.10, -60, 20, 0),
+            (-0.14, -190, -0.10, -58, 18, 0), (-0.24, -172, -0.18, -40, 14, 0),
+            (0.26, -170, 0.22, -40, 12, 0), (-0.05, -200, -0.03, -86, 10, 0),
+        ]
+        for dx1, dy1, dx2, dy2, width, _ in strands:
+            self.cv.create_line(cx + dx1, base_y + dy1, cx + dx2, base_y + dy2,
+                                fill=body, width=width, capstyle="round")
+        # 身体（背影窄梯形）
+        self.cv.create_polygon(cx - 15, base_y - 118, cx + 15, base_y - 118,
+                               cx + 22, base_y - 6, cx - 22, base_y - 6,
+                               fill=body, outline="")
+        # 头
+        self.cv.create_oval(cx - 13, base_y - 150, cx + 13, base_y - 124,
+                            fill=body, outline="")
+        # 一缕红眼微光（侧面）
+        self.cv.create_oval(cx + 8, base_y - 140, cx + 11, base_y - 137,
+                            fill="#ff2b5e", outline="")
+
+    def tick(self):
+        """动画帧：星星呼吸 + 樱花飘落"""
+        t = self._phase
+        self._phase += 0.04
+        for s in self.stars:
+            b = 0.45 + 0.55 * (0.5 + 0.5 * math.sin(t * s["spd"] + s["phase"]))
+            col = s["base"]
+            # 按亮度微调色值（取 base 各分量按 b 缩放近似）
+            try:
+                r, g, bl = int(col[1:3], 16), int(col[3:5], 16), int(col[5:7], 16)
+                nr = min(255, int(120 + (r - 120) * b))
+                ng = min(255, int(120 + (g - 120) * b))
+                nb = min(255, int(150 + (bl - 150) * b))
+                self.cv.itemconfig(s["id"], fill="#%02x%02x%02x" % (nr, ng, nb))
+            except Exception:
+                pass
+        for p in self.petals:
+            p["y"] += p["v"]
+            p["rot"] += 0.03 * p["v"]
+            p["x"] += math.sin(p["rot"]) * p["sway"]
+            if p["y"] - p["s"] > self.h:
+                self.petals.remove(p)
+                self.cv.delete(p["id"])
+                p["y"] = -6 - p["s"]
+                p["x"] = random.uniform(0, self.w)
+                p["id"] = self._petal_oval(p)
+                self.petals.append(p)
+                continue
+            self.cv.coords(p["id"],
+                           p["x"] - p["s"], p["y"] - p["s"] * 0.7,
+                           p["x"] + p["s"], p["y"] + p["s"] * 0.7)
+            self.cv.itemconfig(p["id"], fill=p["col"])
+        self.cv.after(40, self.tick)
 
 
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("JWGLXT Auto Course")
-        self.geometry("1020x720")
-        self.minsize(880, 600)
+        self.title("JWGLXT AUTO · 教务选课自动化")
+        self.geometry("1060x740")
+        self.minsize(900, 620)
         self.configure(bg=BG)
 
         self.client = None
@@ -58,144 +214,167 @@ class App(ctk.CTk):
 
         self._build()
         self.after(100, self._drain_log)
+        if tk is not None:
+            self._sky = NightSky(self.sky)
+            self._resize_sky()
+            self.bind("<Configure>", self._on_resize)
+            self.after(60, self._sky.tick)
 
     # ---------------- UI ----------------
-    def _card(self, parent, title):
-        f = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=10,
+    def _card(self, parent, title, icon="◆"):
+        f = ctk.CTkFrame(parent, fg_color=CARD, corner_radius=14,
                          border_width=1, border_color=LINE)
         f.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(f, text=title, font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color=DIM).pack(anchor="w", padx=12, pady=(10, 2))
+        ctk.CTkLabel(f, text=f"{icon} {title}", text_color=ACCENT2,
+                     font=ctk.CTkFont(family=TAG_FONT, size=12, weight="bold")
+                     ).pack(anchor="w", padx=14, pady=(10, 4))
         return f
 
-    def _btn(self, parent, text, cmd, color=None, height=34):
-        fg = color or CARD2
+    def _btn(self, parent, text, cmd, color=None, height=34, ghost=False):
+        fg = color or CARD3
+        hv = "#3d315c"
         b = ctk.CTkButton(parent, text=text, command=cmd, height=height,
-                          fg_color=fg, hover_color="#2a2a33",
-                          border_width=0, corner_radius=8,
-                          font=ctk.CTkFont(size=13))
+                          fg_color=fg, hover_color=hv,
+                          border_width=0, corner_radius=9,
+                          text_color=TEXT,
+                          font=ctk.CTkFont(family=TAG_FONT, size=12))
         b.pack(fill="x", padx=12, pady=4)
         return b
 
     def _build(self):
-        # 顶部
+        # 底层夜空画布
+        self.sky = tk.Canvas(self, bg=BG, highlightthickness=0)
+        self.sky.pack(fill="both", expand=True)
+
+        # 顶部标题栏
         head = ctk.CTkFrame(self, fg_color=CARD, corner_radius=0,
-                            border_width=0, height=56)
-        head.pack(fill="x", side="top")
-        head.pack_propagate(False)
-        ctk.CTkLabel(head, text="■", text_color=ACCENT,
-                     font=ctk.CTkFont(size=20)).pack(side="left", padx=(16, 8))
-        t = ctk.CTkLabel(head, text="JWGLXT AUTO",
-                         font=ctk.CTkFont(size=16, weight="bold"))
-        t.pack(side="left")
-        ctk.CTkLabel(head, text="教务选课自动化", text_color=DIM,
-                     font=ctk.CTkFont(size=11)).pack(side="left", padx=8)
-        self.status_lbl = ctk.CTkLabel(head, text="●  未连接", text_color=DIM,
-                                       font=ctk.CTkFont(size=12))
-        self.status_lbl.pack(side="right", padx=16)
+                            border_width=0, height=58)
+        head.place(relx=0.02, rely=0.02, relwidth=0.96)
+        ctk.CTkLabel(head, text="✦", text_color=ACCENT,
+                     font=ctk.CTkFont(size=20, weight="bold")
+                     ).place(relx=0.02, rely=0.5, anchor="w")
+        ctk.CTkLabel(head, text="JWGLXT AUTO", text_color=TEXT,
+                     font=ctk.CTkFont(family=TAG_FONT, size=17, weight="bold")
+                     ).place(relx=0.06, rely=0.5, anchor="w")
+        ctk.CTkLabel(head, text="— 教务选课自动化 —", text_color=DIM,
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)
+                     ).place(relx=0.27, rely=0.5, anchor="w")
+        self.status_lbl = ctk.CTkLabel(head, text="○ 未连接", text_color=DIM,
+                                       font=ctk.CTkFont(family=TAG_FONT, size=13))
+        self.status_lbl.place(relx=0.98, rely=0.5, anchor="e")
 
-        body = ctk.CTkFrame(self, fg_color=BG, corner_radius=0, border_width=0)
-        body.pack(fill="both", expand=True, padx=14, pady=12)
+        # 左栏（浮于夜空之上）
+        left = ctk.CTkFrame(self, fg_color=CARD, corner_radius=16,
+                            border_width=1, border_color=LINE, height=1)
+        left.place(relx=0.023, rely=0.13, relwidth=0.345, relheight=0.85)
 
-        # 左栏
-        left = ctk.CTkFrame(body, fg_color=BG, width=330, corner_radius=0,
-                            border_width=0)
-        left.pack(side="left", fill="y", padx=(0, 12))
-        left.pack_propagate(False)
-
-        # 会话
-        c1 = self._card(left, "会话")
-        self.btn_conn = self._btn(c1, "连接浏览器", self.connect, ACCENT)
+        c1 = self._card(left, "会话", "✧")
+        self.btn_conn = self._btn(c1, "连接浏览器", self.connect, ACCENT, 36)
         self.btn_crawl = self._btn(c1, "抓取全表", self.crawl)
         self.btn_view = self._btn(c1, "查看班次", self.open_class_view)
         self.btn_tfilter = self._btn(c1, "时段筛课", self.open_time_filter)
         self.btn_check = self._btn(c1, "链路自检", self.selfcheck)
         self.btn_verify = self._btn(c1, "CDP 验证", self.verify)
 
-        # 目标
-        c2 = self._card(left, "目标课程")
+        c2 = self._card(left, "目标课程", "✦")
         ctk.CTkLabel(c2, text="关键词（空格分隔多个）", text_color=DIM,
-                     font=ctk.CTkFont(size=11)).pack(anchor="w", padx=12, pady=(2, 2))
+                     font=ctk.CTkFont(family=TAG_FONT, size=11)
+                     ).pack(anchor="w", padx=12, pady=(2, 2))
         self.kw = ctk.CTkEntry(c2, placeholder_text="例如: 敦煌 光影 算法",
-                               height=36, fg_color=CARD2, border_color=LINE)
+                               height=36, fg_color=CARD2, border_color=LINE,
+                               text_color=TEXT)
         self.kw.pack(fill="x", padx=12, pady=(0, 6))
         self.cat = {"10": True, "11": True, "01": False}
         self.cat_btns = {}
         row = ctk.CTkFrame(c2, fg_color="transparent")
         row.pack(fill="x", padx=12, pady=(0, 6))
         for k, name in (("10", "通识选修"), ("11", "特殊课程"), ("01", "主修")):
-            b = ctk.CTkButton(row, text=name, width=82, height=30,
-                              fg_color=CARD2 if not self.cat[k] else "#3a1a1a",
-                              text_color=TEXT if not self.cat[k] else ACCENT,
+            b = ctk.CTkButton(row, text=name, width=88, height=30,
+                              fg_color=CARD3 if not self.cat[k] else "#3d2440",
+                              text_color=DIM if not self.cat[k] else ACCENT,
                               border_width=1, border_color=LINE,
-                              hover_color="#2a2a33", corner_radius=15,
-                              font=ctk.CTkFont(size=12),
+                              hover_color="#3d315c", corner_radius=15,
+                              font=ctk.CTkFont(family=TAG_FONT, size=12),
                               command=lambda kk=k: self._toggle_cat(kk))
-            b.pack(side="left", padx=(0, 6))
+            b.pack(side="left", padx=(0, 8))
             self.cat_btns[k] = b
 
-        # 参数
-        c3 = self._card(left, "参数")
+        c3 = self._card(left, "参数", "◇")
         pr = ctk.CTkFrame(c3, fg_color="transparent")
         pr.pack(fill="x", padx=12)
         ctk.CTkLabel(pr, text="轮询间隔(s)", text_color=DIM,
-                     font=ctk.CTkFont(size=11)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.interval = ctk.CTkEntry(pr, width=60, height=30, fg_color=CARD2,
-                                     border_color=LINE)
+                                     border_color=LINE, text_color=TEXT)
         self.interval.insert(0, "1.5")
         self.interval.pack(side="left", padx=(6, 18))
         ctk.CTkLabel(pr, text="超时(s)", text_color=DIM,
-                     font=ctk.CTkFont(size=11)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=11)).pack(side="left")
         self.timeout = ctk.CTkEntry(pr, width=80, height=30, fg_color=CARD2,
-                                    border_color=LINE)
+                                    border_color=LINE, text_color=TEXT)
         self.timeout.insert(0, "1800")
         self.timeout.pack(side="left", padx=6)
 
         self.dry_sw = ctk.CTkSwitch(c3, text="预演模式（只匹配不出手）",
                                     progress_color=ACCENT,
-                                    font=ctk.CTkFont(size=12))
-        self.dry_sw.pack(anchor="w", padx=12, pady=(8, 2))
+                                    font=ctk.CTkFont(family=TAG_FONT, size=12))
+        self.dry_sw.pack(anchor="w", padx=14, pady=(8, 2))
         self.dry_sw.select()
         self.cpx_sw = ctk.CTkSwitch(c3, text="尝试组合实践班",
                                     progress_color=ACCENT,
-                                    font=ctk.CTkFont(size=12))
-        self.cpx_sw.pack(anchor="w", padx=12, pady=(0, 8))
+                                    font=ctk.CTkFont(family=TAG_FONT, size=12))
+        self.cpx_sw.pack(anchor="w", padx=14, pady=(0, 8))
 
-        # 动作
-        self.btn_start = ctk.CTkButton(left, text="开  始", height=44,
-                                       fg_color=ACCENT, hover_color="#ff4747",
-                                       corner_radius=8,
-                                       font=ctk.CTkFont(size=15, weight="bold"),
+        self.btn_start = ctk.CTkButton(left, text="开  始", height=46,
+                                       fg_color=ACCENT, hover_color="#ff94bf",
+                                       corner_radius=12,
+                                       font=ctk.CTkFont(family=TAG_FONT, size=16,
+                                                        weight="bold"),
                                        command=self.start)
-        self.btn_start.pack(fill="x", padx=12, pady=(4, 4))
+        self.btn_start.pack(fill="x", padx=14, pady=(4, 6))
         self.btn_start.configure(state="disabled")
-        self.btn_stop = ctk.CTkButton(left, text="停  止", height=36,
+        self.btn_stop = ctk.CTkButton(left, text="停  止", height=38,
                                       fg_color="transparent",
-                                      hover_color="#3a1a1a", border_width=1,
+                                      hover_color="#3a2440", border_width=1,
                                       border_color=ERR, text_color=ERR,
-                                      corner_radius=8,
-                                      font=ctk.CTkFont(size=13),
+                                      corner_radius=10,
+                                      font=ctk.CTkFont(family=TAG_FONT, size=13),
                                       command=self.stop)
-        self.btn_stop.pack(fill="x", padx=12)
+        self.btn_stop.pack(fill="x", padx=14)
         self.btn_stop.configure(state="disabled")
 
-        # 右栏日志
-        self.log_box = ctk.CTkTextbox(body, fg_color="#0e0e12",
+        # 右栏日志（浮于夜空之上）
+        self.log_box = ctk.CTkTextbox(self, fg_color="#12101f",
                                       border_color=LINE, border_width=1,
-                                      corner_radius=10, wrap="none",
-                                      font=ctk.CTkFont(family="Cascadia Mono",
-                                                       size=12))
-        self.log_box.pack(side="left", fill="both", expand=True)
+                                      corner_radius=16, wrap="none",
+                                      font=ctk.CTkFont(family=MONO_FONT, size=12),
+                                      text_color=TEXT, width=1, height=1)
+        self.log_box.place(relx=0.383, rely=0.13, relwidth=0.595, relheight=0.85)
         for tag, color in LV_COLOR.items():
             self.log_box.tag_config(tag, foreground=color)
-        self.log_box.tag_config("t", foreground="#555555")
-        self._log("等待操作。先「连接浏览器」，再「抓全表」，最后输入关键词开始。")
+        self.log_box.tag_config("t", foreground="#6a6390")
+        self._log("✦ 欢迎回来，主人。先「连接浏览器」，再「抓取全表」，"
+                  "最后输入关键词，开始狙击心仪的课程吧。")
+
+    def _on_resize(self, ev):
+        if ev.widget is self and tk is not None:
+            cur = (self.winfo_width(), self.winfo_height())
+            if cur != (self._last_w, self._last_h):
+                self._resize_sky()
+
+    def _resize_sky(self):
+        self.update_idletasks()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        self._last_w, self._last_h = w, h
+        if w > 10 and h > 10:
+            self._sky.init(w, h)
 
     def _toggle_cat(self, k):
         self.cat[k] = not self.cat[k]
         on = self.cat[k]
-        self.cat_btns[k].configure(fg_color="#3a1a1a" if on else CARD2,
-                                   text_color=ACCENT if on else TEXT)
+        self.cat_btns[k].configure(fg_color="#3d2440" if on else CARD3,
+                                   text_color=ACCENT if on else DIM)
 
     # ---------------- 日志 ----------------
     def _log(self, text, level="info"):
@@ -257,7 +436,7 @@ class App(ctk.CTk):
             return
         self._log("抓取课程全表...")
         try:
-            kklxdms = sorted(self.client.tabs.keys())   # 全部类别（主修/体育/通识/特殊）
+            kklxdms = sorted(self.client.tabs.keys())
             snap = grab.fetch_full_snapshot(self.client, kklxdms, self._log,
                                             detail=True)
             self.snapshot = snap
@@ -289,7 +468,6 @@ class App(ctk.CTk):
 
     # ---------------- 课程班次查看 ----------------
     def _conflict_with(self, slots):
-        """返回与这些时间槽冲突的第一门已选课名；无则 None。"""
         if not slots:
             return None
         for row in self.choosed_rows:
@@ -301,11 +479,12 @@ class App(ctk.CTk):
     def _mk_view_win(self, title):
         win = ctk.CTkToplevel(self)
         win.title(title)
-        win.geometry("880x560")
-        win.configure(fg_color=BG)
-        box = ctk.CTkTextbox(win, fg_color="#0e0e12", border_color=LINE,
-                             border_width=1, corner_radius=10, wrap="none",
-                             font=ctk.CTkFont(family="Cascadia Mono", size=12))
+        win.geometry("900x580")
+        win.configure(fg_color=CARD)
+        box = ctk.CTkTextbox(win, fg_color="#12101f", border_color=LINE,
+                             border_width=1, corner_radius=14, wrap="none",
+                             font=ctk.CTkFont(family=MONO_FONT, size=12),
+                             text_color=TEXT)
         box.pack(fill="both", expand=True, padx=12, pady=12)
         box.tag_config("head", foreground=WARN)
         box.tag_config("conflict", foreground=ERR)
@@ -325,12 +504,12 @@ class App(ctk.CTk):
         top = ctk.CTkFrame(win, fg_color="transparent")
         top.pack(fill="x", padx=12, pady=(12, 0))
         ctk.CTkLabel(top, text="课程关键词:", text_color=DIM,
-                     font=ctk.CTkFont(size=12)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
         kw = ctk.CTkEntry(top, width=280, height=30, fg_color=CARD2,
-                          border_color=LINE)
+                          border_color=LINE, text_color=TEXT)
         kw.pack(side="left", padx=(8, 8))
         ctk.CTkButton(top, text="查询", width=80, height=30,
-                      fg_color=ACCENT, hover_color="#ff4747",
+                      fg_color=ACCENT, hover_color="#ff94bf",
                       command=lambda: self._render_class_view(kw.get().strip(), win)
                       ).pack(side="left")
         kw.bind("<Return>",
@@ -349,7 +528,7 @@ class App(ctk.CTk):
             box.insert("end", f"全表里没找到含「{text}」的课程\n", "conflict")
             return
         for kch_id, c in hits[:12]:
-            box.insert("end", f"■ {c['kcmc']}（{c['kch']}，{c['xf']}分）\n", "head")
+            box.insert("end", f"❖ {c['kcmc']}（{c['kch']}，{c['xf']}分）\n", "head")
             try:
                 jxbs = self.client.get_jxbs(kch_id, c["kklxdm"])
             except Exception as e:
@@ -390,24 +569,26 @@ class App(ctk.CTk):
         top = ctk.CTkFrame(win, fg_color="transparent")
         top.pack(fill="x", padx=12, pady=(12, 0))
         ctk.CTkLabel(top, text="星期:", text_color=DIM,
-                     font=ctk.CTkFont(size=12)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
         days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         day_menu = ctk.CTkOptionMenu(top, values=days, width=88, height=30,
                                      fg_color=CARD2, button_color=ACCENT,
-                                     button_hover_color="#ff4747")
+                                     button_hover_color="#ff94bf",
+                                     text_color=TEXT)
         day_menu.set("周一")
         day_menu.pack(side="left", padx=(6, 14))
         ctk.CTkLabel(top, text="节次:", text_color=DIM,
-                     font=ctk.CTkFont(size=12)).pack(side="left")
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
         seg_menu = ctk.CTkOptionMenu(top, values=["1-2", "3-4", "5-6", "7-8",
                                                   "9-10", "11-12"],
                                      width=88, height=30, fg_color=CARD2,
                                      button_color=ACCENT,
-                                     button_hover_color="#ff4747")
+                                     button_hover_color="#ff94bf",
+                                     text_color=TEXT)
         seg_menu.set("3-4")
         seg_menu.pack(side="left", padx=(6, 14))
         ctk.CTkButton(top, text="筛选", width=80, height=30,
-                      fg_color=ACCENT, hover_color="#ff4747",
+                      fg_color=ACCENT, hover_color="#ff94bf",
                       command=lambda: self._render_time_filter(
                           win, days.index(day_menu.get()) + 1,
                           *map(int, seg_menu.get().split("-")))
@@ -443,12 +624,12 @@ class App(ctk.CTk):
         count = 0
         for kch_id, c in self.snapshot.items():
             if kch_id in choosed_ids:
-                continue      # 已选的在顶部 ★ 区展示，不重复进可选列表
+                continue
             matched = [cls for cls in c["classes"] if in_slot(cls)]
             if not matched:
                 continue
             count += 1
-            box.insert("end", f"■ {c['kcmc']}（{c['kch']}，{c['xf']}分，"
+            box.insert("end", f"❖ {c['kcmc']}（{c['kch']}，{c['xf']}分，"
                                f"{len(c['classes'])}个班）\n", "head")
             for cls in matched:
                 slots = parse_sksj(cls.get("sksj") or "")
