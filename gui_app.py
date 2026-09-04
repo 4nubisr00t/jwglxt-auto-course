@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import grab
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
                            check_alive, JWClient, JW_BASE, JW_HOST)
+from schedule import parse_sksj, any_conflict, slots_str
 
 try:
     import customtkinter as ctk
@@ -51,6 +52,9 @@ class App(ctk.CTk):
         self.log_q = queue.Queue()
         self._running = False
         self._running_connect = False
+        self.snapshot = None       # 抓取的全表缓存
+        self.choosed_rows = []     # 已选课程列表（含 sksj）
+        self.busy_slots = []       # 已选课全部时间槽（冲突检测基准）
 
         self._build()
         self.after(100, self._drain_log)
@@ -103,6 +107,8 @@ class App(ctk.CTk):
         c1 = self._card(left, "会话")
         self.btn_conn = self._btn(c1, "连接浏览器", self.connect, ACCENT)
         self.btn_crawl = self._btn(c1, "抓取全表", self.crawl)
+        self.btn_view = self._btn(c1, "查看班次", self.open_class_view)
+        self.btn_tfilter = self._btn(c1, "时段筛课", self.open_time_filter)
         self.btn_check = self._btn(c1, "链路自检", self.selfcheck)
         self.btn_verify = self._btn(c1, "CDP 验证", self.verify)
 
@@ -226,6 +232,16 @@ class App(ctk.CTk):
             self._log(f"连接成功: tabs={list(self.client.tabs)} "
                       f"rwlx={self.client._h('rwlx') or '?'} "
                       f"xklc={self.client._h('xklc') or '?'}", "ok")
+            try:
+                rows = self.client.get_choosed()
+                self.choosed_rows = rows
+                self.busy_slots = []
+                for r in rows:
+                    self.busy_slots += parse_sksj(r.get("sksj") or "")
+                self._log(f"已选 {len(rows)} 门，时间槽 {len(self.busy_slots)} 段"
+                          f"（冲突检测基准）", "ok")
+            except Exception as e:
+                self._log(f"已选获取失败: {e}", "warn")
             self.btn_start.configure(state="normal")
             self._status("已连接", OK)
         except Exception as e:
@@ -242,6 +258,7 @@ class App(ctk.CTk):
         self._log("抓取课程全表...")
         try:
             snap = grab.fetch_full_snapshot(self.client, ["10", "11"], self._log)
+            self.snapshot = snap
             self._log(f"全表完成: {len(snap)} 门课程", "ok")
         except Exception as e:
             self._log(f"抓取失败: {e}", "err")
@@ -267,6 +284,174 @@ class App(ctk.CTk):
             self._log(f"CDP 验证: 共 {len(cookies)} cookie, 教务域 {len(jw)} 个", "ok")
         except Exception as e:
             self._log(f"CDP 验证失败: {e}", "err")
+
+    # ---------------- 课程班次查看 ----------------
+    def _conflict_with(self, slots):
+        """返回与这些时间槽冲突的第一门已选课名；无则 None。"""
+        if not slots:
+            return None
+        for row in self.choosed_rows:
+            rslots = parse_sksj(row.get("sksj") or "")
+            if any_conflict(slots, rslots):
+                return row.get("kcmc")
+        return None
+
+    def _mk_view_win(self, title):
+        win = ctk.CTkToplevel(self)
+        win.title(title)
+        win.geometry("880x560")
+        win.configure(fg_color=BG)
+        box = ctk.CTkTextbox(win, fg_color="#0e0e12", border_color=LINE,
+                             border_width=1, corner_radius=10, wrap="none",
+                             font=ctk.CTkFont(family="Cascadia Mono", size=12))
+        box.pack(fill="both", expand=True, padx=12, pady=12)
+        box.tag_config("head", foreground=WARN)
+        box.tag_config("conflict", foreground=ERR)
+        box.tag_config("ok", foreground=OK)
+        box.tag_config("dim", foreground=DIM)
+        win._box = box
+        return win
+
+    def open_class_view(self):
+        if self.client is None:
+            self._log("请先连接浏览器", "warn")
+            return
+        if not self.snapshot:
+            self._log("请先抓取全表，才能定位课程", "warn")
+            return
+        win = self._mk_view_win("课程班次查看")
+        top = ctk.CTkFrame(win, fg_color="transparent")
+        top.pack(fill="x", padx=12, pady=(12, 0))
+        ctk.CTkLabel(top, text="课程关键词:", text_color=DIM,
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        kw = ctk.CTkEntry(top, width=280, height=30, fg_color=CARD2,
+                          border_color=LINE)
+        kw.pack(side="left", padx=(8, 8))
+        ctk.CTkButton(top, text="查询", width=80, height=30,
+                      fg_color=ACCENT, hover_color="#ff4747",
+                      command=lambda: self._render_class_view(kw.get().strip(), win)
+                      ).pack(side="left")
+        kw.bind("<Return>",
+                lambda e: self._render_class_view(kw.get().strip(), win))
+        win._box.insert("end", "输入课程名/课程号，回车查询各班次（实时抓取，含冲突标记）\n", "dim")
+        kw.focus_set()
+
+    def _render_class_view(self, text, win):
+        box = win._box
+        box.delete("1.0", "end")
+        if not text:
+            box.insert("end", "输入课程名或课程号关键词后查询\n", "dim")
+            return
+        hits = grab.match_courses(self.snapshot, text.split())
+        if not hits:
+            box.insert("end", f"全表里没找到含「{text}」的课程\n", "conflict")
+            return
+        for kch_id, c in hits[:12]:
+            box.insert("end", f"■ {c['kcmc']}（{c['kch']}，{c['xf']}分）\n", "head")
+            try:
+                jxbs = self.client.get_jxbs(kch_id, c["kklxdm"])
+            except Exception as e:
+                box.insert("end", f"  班次获取失败: {e}\n", "conflict")
+                continue
+            for jb in jxbs:
+                slots = parse_sksj(jb.get("sksj") or "")
+                st = slots_str(slots)
+                rl = int(jb.get("jxbrl") or 0)
+                yx = int(jb.get("yxzrs") or 0)
+                safe = rl - yx if rl else -1
+                teacher = (jb.get("jsxx") or "").split("/")[-1] or "?"
+                conf = self._conflict_with(slots)
+                if conf:
+                    tag = "conflict"
+                    mark = f"✗ 与已选「{conf}」冲突"
+                else:
+                    tag = "ok"
+                    mark = "✓ 时间不冲突"
+                yl = f"{safe}" if safe >= 0 else "?"
+                box.insert("end",
+                           f"  [{jb.get('jxb_id','')[:8]}] {st} | "
+                           f"{jb.get('jxdd') or '?'} | {teacher} | "
+                           f"余量 {yl}/{rl or '?'} | {mark}\n", tag)
+            box.insert("end", "\n")
+        if len(hits) > 12:
+            box.insert("end", f"... 还有 {len(hits) - 12} 门，请用更精确的关键词\n", "dim")
+
+    # ---------------- 按时间段筛课 ----------------
+    def open_time_filter(self):
+        if self.client is None:
+            self._log("请先连接浏览器", "warn")
+            return
+        if not self.snapshot:
+            self._log("请先抓取全表，才能按时间筛课", "warn")
+            return
+        win = self._mk_view_win("按时间段筛选课程")
+        top = ctk.CTkFrame(win, fg_color="transparent")
+        top.pack(fill="x", padx=12, pady=(12, 0))
+        ctk.CTkLabel(top, text="星期:", text_color=DIM,
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        days = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+        day_menu = ctk.CTkOptionMenu(top, values=days, width=88, height=30,
+                                     fg_color=CARD2, button_color=ACCENT,
+                                     button_hover_color="#ff4747")
+        day_menu.set("周一")
+        day_menu.pack(side="left", padx=(6, 14))
+        ctk.CTkLabel(top, text="节次:", text_color=DIM,
+                     font=ctk.CTkFont(size=12)).pack(side="left")
+        seg_menu = ctk.CTkOptionMenu(top, values=["1-2", "3-4", "5-6", "7-8",
+                                                  "9-10", "11-12"],
+                                     width=88, height=30, fg_color=CARD2,
+                                     button_color=ACCENT,
+                                     button_hover_color="#ff4747")
+        seg_menu.set("3-4")
+        seg_menu.pack(side="left", padx=(6, 14))
+        ctk.CTkButton(top, text="筛选", width=80, height=30,
+                      fg_color=ACCENT, hover_color="#ff4747",
+                      command=lambda: self._render_time_filter(
+                          win, days.index(day_menu.get()) + 1,
+                          *map(int, seg_menu.get().split("-")))
+                      ).pack(side="left")
+        win._box.insert("end", "选星期与节次后点「筛选」，列出该时段有课的课程与各班余量、冲突标记\n", "dim")
+
+    def _render_time_filter(self, win, day, a, b):
+        box = win._box
+        box.delete("1.0", "end")
+
+        def in_slot(cls):
+            for s in parse_sksj(cls.get("sksj") or ""):
+                if s.day == day and max(s.start, a) <= min(s.end, b):
+                    return True
+            return False
+
+        count = 0
+        for kch_id, c in self.snapshot.items():
+            matched = [cls for cls in c["classes"] if in_slot(cls)]
+            if not matched:
+                continue
+            count += 1
+            box.insert("end", f"■ {c['kcmc']}（{c['kch']}，{c['xf']}分，"
+                               f"{len(c['classes'])}个班）\n", "head")
+            for cls in matched:
+                slots = parse_sksj(cls.get("sksj") or "")
+                st = slots_str(slots)
+                rl = int(cls.get("jxbrl") or 0)
+                yx = int(cls.get("yxzrs") or 0)
+                safe = rl - yx if rl else -1
+                conf = self._conflict_with(slots)
+                if conf:
+                    tag = "conflict"
+                    mark = f"✗ 与「{conf}」冲突"
+                else:
+                    tag = "ok"
+                    mark = "✓ 可抢"
+                yl = f"{safe}" if safe >= 0 else "?"
+                box.insert("end",
+                           f"  {st} | {cls.get('jxdd') or '?'} | "
+                           f"余量 {yl}/{rl or '?'} | {mark}\n", tag)
+            box.insert("end", "\n")
+        if count == 0:
+            box.insert("end", "该时段没有找到课程\n", "dim")
+        else:
+            box.insert("end", f"共 {count} 门课在该时段有班\n", "info")
 
     # ---------------- 抢课 ----------------
     def _opts(self):

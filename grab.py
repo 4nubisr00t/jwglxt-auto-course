@@ -19,6 +19,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
                            check_alive, JWClient, spawn_chrome, SPAWN_URL)
+from schedule import parse_sksj, any_conflict, slots_str
 
 BIG_PAGE = 100000          # 大分页一次拉全
 SUCCESS_FLAGS = ("1", "3", "6")
@@ -43,6 +44,9 @@ def fetch_full_snapshot(client, kklxdms, log=print):
             c["classes"].append({
                 "jxb_id": r.get("jxb_id"), "jxbmc": r.get("jxbmc"),
                 "yxzrs": r.get("yxzrs"), "cxbj": r.get("cxbj"),
+                "sksj": r.get("sksj") or "", "jxdd": r.get("jxdd") or "",
+                "jsxx": r.get("jsxx") or "",
+                "jxbrl": r.get("jxbrl") or "",
             })
         log(f"[{now()}] 类别 {kklxdm} 抓取完成: {len(rows)} 行")
     return out
@@ -58,15 +62,32 @@ def match_courses(snapshot, keywords):
     return hits
 
 
-def pick_class(client, kch_id, course, class_idx=None):
-    """get_jxbs 现取教学班 + 依据类别选目标班。返回 (jxb, note)。"""
+def pick_class(client, kch_id, course, class_idx=None, busy_slots=None):
+    """get_jxbs 现取教学班 + 依据类别选目标班。返回 (jxb, note, conflict_all)。
+
+    busy_slots: 已选课的全部时间槽（冲突检测基准）。提供时，
+    先剔除与已选课冲突的班，再在剩余班里按余量选最空的；
+    若全部班都冲突，返回 (None, 提示, True)，绝不硬抢。
+    """
     jxbs = client.get_jxbs(kch_id, course["kklxdm"])
     if not jxbs:
-        return None, "无教学班"
+        return None, "无教学班", False
     if class_idx is not None:
         if 0 <= class_idx < len(jxbs):
-            return jxbs[class_idx], f"指定第{class_idx + 1}班"
-        return None, f"class-idx 越界({len(jxbs)}个班)"
+            return jxbs[class_idx], f"指定第{class_idx + 1}班", False
+        return None, f"class-idx 越界({len(jxbs)}个班)", False
+
+    if busy_slots:
+        safe = []
+        for jb in jxbs:
+            jb_slots = parse_sksj(jb.get("sksj") or "")
+            if any_conflict(jb_slots, busy_slots):
+                continue
+            safe.append(jb)
+        if not safe:
+            return None, "所有班均与已选课时间冲突", True
+        jxbs = safe
+
     max_yx = max((int(jb.get("yxzrs") or 0) for jb in jxbs), default=0)
 
     def surplus(jb):
@@ -79,7 +100,7 @@ def pick_class(client, kch_id, course, class_idx=None):
     best = sorted(jxbs, key=surplus, reverse=True)[0]
     yx, rl = int(best.get("yxzrs") or 0), int(best.get("jxbrl") or 0)
     note = f"余量={max(0, rl - yx) if rl else max(0, max_yx - yx)}/{rl or max_yx}"
-    return best, note
+    return best, note, False
 
 
 def try_fetch_subclasses(client, jxb, kklxdm):
@@ -175,6 +196,12 @@ def run_grab(keywords, kklxdms=("10", "11"), interval=1.5, timeout=1800,
 
     choosed = client.get_choosed()
     choosed_ids = {row["kch_id"] for row in choosed}
+    # 已选课全部时间槽：作为本轮抢课的冲突检测基准
+    busy_slots = []
+    for row in choosed:
+        busy_slots += parse_sksj(row.get("sksj") or "")
+    if busy_slots:
+        log(f"[{now()}] 已选 {len(choosed)} 门，时间槽 {len(busy_slots)} 段（冲突检测基准）")
     targets = []
     for kch_id, c in hits:
         if kch_id in choosed_ids:
@@ -191,10 +218,15 @@ def run_grab(keywords, kklxdms=("10", "11"), interval=1.5, timeout=1800,
 
     if dry_run:
         for t in targets:
-            jxb, note = pick_class(client, t["kch_id"], t)
+            jxb, note, _ = pick_class(client, t["kch_id"], t,
+                                      busy_slots=busy_slots)
             if jxb:
                 log(f"  [预演] {t['kcmc']}: jxb={jxb.get('jxb_id','')[:8]} "
-                    f"do_jxb={jxb.get('do_jxb_id','')[:12]}... {note}")
+                    f"do_jxb={jxb.get('do_jxb_id','')[:12]}... "
+                    f"时间={slots_str(parse_sksj(jxb.get('sksj') or ''))} "
+                    f"{note}")
+            else:
+                log(f"  [预演] {t['kcmc']}: {note}")
         log(f"[{now()}] dry-run 结束，未提交任何请求")
         return "dry-run"
 
@@ -208,9 +240,13 @@ def run_grab(keywords, kklxdms=("10", "11"), interval=1.5, timeout=1800,
         for t in list(pending):
             if stop_event is not None and stop_event.is_set():
                 break
-            jxb, note = pick_class(client, t["kch_id"], t)
+            jxb, note, conflict_all = pick_class(client, t["kch_id"], t,
+                                                 busy_slots=busy_slots)
             if not jxb:
-                log(f"[{now()}] {t['kcmc']}: {note}")
+                if conflict_all:
+                    log(f"[{now()}] {t['kcmc']}: {note}，跳过（不会退已选课）")
+                else:
+                    log(f"[{now()}] {t['kcmc']}: {note}")
                 continue
             sub_ids = None
             if str(t.get("jxbzls", "1")) != "1":
