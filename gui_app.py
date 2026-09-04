@@ -248,7 +248,7 @@ class App(ctk.CTk):
         self._destroyed = False
         self._last_w = 0
         self._last_h = 0
-        self._wide_log = False     # 日志宽屏展开开关
+        self._wide_log = True      # 默认宽屏日志，右侧人物区不再留黑（可点「对话模式」切回）
 
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
         self._build()
