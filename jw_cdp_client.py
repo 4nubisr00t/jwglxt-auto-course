@@ -87,19 +87,39 @@ def wait_devtools(profile_dir: str, timeout: float = 25.0):
     return None
 
 
+def _port_alive(ws_url: str) -> bool:
+    """TCP 探测调试端口是否真的在监听（防止残留 DevToolsActivePort 误判复用）。"""
+    try:
+        from urllib.parse import urlparse
+        import socket
+        p = urlparse(ws_url)
+        with socket.create_connection((p.hostname or "127.0.0.1",
+                                       p.port or 0), timeout=1):
+            return True
+    except Exception:
+        return False
+
+
 def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
     """启动托管 Chrome（独立 profile + 随机调试端口），返回 ws 地址。
 
-    - 若该 profile 已有实例运行，直接复用（登录态保留）
+    - 若该 profile 已有实例在跑（端口确实监听中），直接复用（登录态保留）
+    - 残留端口文件但实例已死：清除后重新拉起
     - 不影响用户日常 Chrome
     """
     chrome = find_chrome()
     if not chrome:
         raise RuntimeError("未找到 Chrome，请先安装")
     os.makedirs(profile_dir, exist_ok=True)
+    port_file = os.path.join(profile_dir, "DevToolsActivePort")
     ws_url = wait_devtools(profile_dir, timeout=3)
-    if ws_url:                      # 已在运行，复用
+    if ws_url and _port_alive(ws_url):      # 端口真的活着才算复用
         return ws_url
+    if ws_url:                               # 残留文件：清掉再起新实例
+        try:
+            os.remove(port_file)
+        except OSError:
+            pass
     cmd = [chrome,
            f"--user-data-dir={profile_dir}",
            "--remote-debugging-port=0",   # 随机端口，写进 DevToolsActivePort
