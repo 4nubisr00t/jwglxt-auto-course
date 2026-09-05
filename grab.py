@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from jw_cdp_client import (get_cdp_ws_url, cdp_get_cookies, build_session,
-                           check_alive, JWClient, spawn_chrome, SPAWN_URL,
+                           check_alive, JWClient, spawn_chrome, spawn_browser, SPAWN_URL,
                            open_page_via_cdp, wait_page_loaded, JW_INDEX)
 from schedule import parse_sksj, any_conflict, slots_str
 
@@ -165,21 +165,22 @@ def submit_course(client, course, jxb, sub_ids=None):
     )
 
 
-def init_client(log=print, spawn=True, login_wait=300):
+def init_client(log=print, spawn=True, login_wait=300, browser_choice="auto"):
     """CDP cookie -> 会话 -> 页面上下文。返回 (client, ws)。
 
-    spawn=True 时：检测不到调试实例则自动拉起托管 Chrome（独立 profile），
+    spawn=True 时：检测不到调试实例则自动拉起托管浏览器（独立 profile），
     打开湘大门户登录页，并等待用户登录后进入教务系统（最多 login_wait 秒）。
     """
     ws = None
     try:
-        ws = get_cdp_ws_url()
+        ws = get_cdp_ws_url(browser_choice)
     except RuntimeError:
         ws = None
     if ws is None and spawn:
-        log("[+] 未检测到调试实例，自动启动托管 Chrome...")
-        ws = spawn_chrome(SPAWN_URL)
-        log(f"[+] 已打开 Chrome 窗口，请在其中登录教务并打开选课页")
+        b_label = "Edge" if browser_choice == "edge" else ("Chrome" if browser_choice == "chrome" else "浏览器")
+        log(f"[+] 未检测到调试实例，自动启动托管 {b_label}...")
+        ws = spawn_browser(SPAWN_URL, browser_type=browser_choice)
+        log(f"[+] 已打开 {b_label} 窗口，请在其中登录教务并打开选课页")
         deadline = time.time() + login_wait
         last_progress = 0
         while True:
@@ -233,10 +234,10 @@ def init_client(log=print, spawn=True, login_wait=300):
 
 def run_grab(keywords, kklxdms=("10", "11"), interval=1.5, timeout=1800,
              class_idx=None, try_complex=False, dry_run=False,
-             log=print, stop_event=None, spawn=True, login_wait=120):
+             log=print, stop_event=None, spawn=True, login_wait=120, browser="auto"):
     """完整抢课流程。可用 stop_event(threading.Event) 中途停止。"""
     log(f"[{now()}] 初始化会话...")
-    client, _ = init_client(log, spawn=spawn, login_wait=login_wait)
+    client, _ = init_client(log, spawn=spawn, login_wait=login_wait, browser_choice=browser)
     log(f"[{now()}] 拉取全表: 类别 {list(kklxdms)}")
     snapshot = fetch_full_snapshot(client, kklxdms, log)
 
@@ -346,15 +347,17 @@ def main():
     ap.add_argument("--class-idx", type=int)
     ap.add_argument("--try-complex", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--browser", default="auto", choices=["auto", "edge", "chrome"],
+                    help="选择浏览器 (auto, edge, chrome，默认 auto)")
     ap.add_argument("--no-spawn", action="store_true",
-                    help="不自动启动托管 Chrome（需手动开调试实例）")
+                    help="不自动启动托管浏览器（需手动开调试实例）")
     args = ap.parse_args()
 
     kklxdms = [s.strip() for s in args.kklxdm.split(",") if s.strip()]
     run_grab(args.keywords, kklxdms=kklxdms, interval=args.interval,
              timeout=args.timeout, class_idx=args.class_idx,
              try_complex=args.try_complex, dry_run=args.dry_run,
-             spawn=not args.no_spawn)
+             spawn=not args.no_spawn, browser=args.browser)
 
 
 if __name__ == "__main__":

@@ -571,6 +571,20 @@ class App(ctk.CTk):
 
         # ---- 卡片 1: 契约链路 ----
         c1 = self._card(self.left_frame, "契约链路 · Contract", "🌸")
+
+        # 浏览器媒介选择
+        brow_row = ctk.CTkFrame(c1, fg_color="transparent")
+        brow_row.pack(fill="x", padx=8, pady=(4, 6))
+        ctk.CTkLabel(brow_row, text="浏览器介质", text_color=DIM,
+                     font=ctk.CTkFont(family=TAG_FONT, size=12)).pack(side="left")
+        self.menu_browser = ctk.CTkOptionMenu(
+            brow_row, values=["自动检测 (Auto)", "Microsoft Edge", "Google Chrome"],
+            height=28, fg_color=CARD2, button_color=CARD3, button_hover_color=CARD_HOVER,
+            text_color=TEXT, font=ctk.CTkFont(family=TAG_FONT, size=12)
+        )
+        self.menu_browser.set("自动检测 (Auto)")
+        self.menu_browser.pack(side="right", fill="x", expand=True, padx=(8, 0))
+
         self.btn_conn = self._btn(c1, "❖ 结下契约 · 连接教务", self.connect, ACCENT, 36, bold=True)
 
         # 并排行 1: 扫描全表 + 班次透镜
@@ -1187,8 +1201,16 @@ class App(ctk.CTk):
 
     def _connect_worker(self):
         try:
-            self._log("✦ 正在侦测 Chrome 调试会话，必要时自动召唤托管实例...", "star")
-            self.client, _ = grab.init_client(spawn=True, log=self._log)
+            b_val = self.menu_browser.get() if hasattr(self, "menu_browser") else "自动检测 (Auto)"
+            b_map = {
+                "自动检测 (Auto)": "auto",
+                "Microsoft Edge": "edge",
+                "Google Chrome": "chrome"
+            }
+            browser_choice = b_map.get(b_val, "auto")
+            b_label = "Edge" if browser_choice == "edge" else ("Chrome" if browser_choice == "chrome" else "浏览器")
+            self._log(f"✦ 正在侦测 {b_label} 调试会话，必要时自动召唤托管实例...", "star")
+            self.client, _ = grab.init_client(spawn=True, log=self._log, browser_choice=browser_choice)
             self._log(f"✨ 教务回路连接成功: tabs={list(self.client.tabs)} "
                       f"rwlx={self.client._h('rwlx') or '?'} "
                       f"xklc={self.client._h('xklc') or '?'}", "ok")

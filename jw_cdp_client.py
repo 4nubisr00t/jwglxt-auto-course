@@ -49,11 +49,21 @@ CDP_PORT_FILE = os.path.join(
     os.environ.get("USERPROFILE") or os.path.expanduser("~"),
     "AppData", "Local", "Google", "Chrome", "User Data", "DevToolsActivePort",
 )
+CHROME_CDP_PORT_FILE = CDP_PORT_FILE
+EDGE_CDP_PORT_FILE = os.path.join(
+    os.environ.get("USERPROFILE") or os.path.expanduser("~"),
+    "AppData", "Local", "Microsoft", "Edge", "User Data", "DevToolsActivePort",
+)
 
-# 托管 Chrome 实例的独立 profile（与用户日常 Chrome 隔离）
+# 托管实例的独立 profile（与用户日常浏览器隔离）
 MANAGED_PROFILE = os.path.join(
     os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
     "jwglxt-auto", "chrome-profile",
+)
+MANAGED_CHROME_PROFILE = MANAGED_PROFILE
+MANAGED_EDGE_PROFILE = os.path.join(
+    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
+    "jwglxt-auto", "edge-profile",
 )
 
 
@@ -69,6 +79,52 @@ def find_chrome() -> str:
         if c and os.path.isfile(c):
             return c
     return None
+
+
+def find_edge() -> str:
+    """定位 msedge.exe（常见安装路径）。"""
+    cands = [
+        os.environ.get("PROGRAMFILES(X86)", "") + r"\Microsoft\Edge\Application\msedge.exe",
+        os.environ.get("PROGRAMFILES", "") + r"\Microsoft\Edge\Application\msedge.exe",
+        os.environ.get("LOCALAPPDATA", "") + r"\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]
+    for c in cands:
+        if c and os.path.isfile(c):
+            return c
+    return None
+
+
+def find_browser(browser_type: str = "auto") -> tuple:
+    """根据选择返回 (可执行文件路径, 规范类型 'edge'|'chrome')。"""
+    b = (browser_type or "auto").lower()
+    if "edge" in b:
+        edge = find_edge()
+        if not edge:
+            raise RuntimeError("未找到 Microsoft Edge 安装路径")
+        return edge, "edge"
+    elif "chrome" in b:
+        chrome = find_chrome()
+        if not chrome:
+            raise RuntimeError("未找到 Google Chrome 安装路径")
+        return chrome, "chrome"
+    else:  # auto
+        # 1. 优先检查当前是否有正在运行调试端口的实例
+        for pdir, bname in [(MANAGED_EDGE_PROFILE, "edge"), (MANAGED_CHROME_PROFILE, "chrome")]:
+            ws = wait_devtools(pdir, timeout=0.3)
+            if ws and _port_alive(ws):
+                p = find_edge() if bname == "edge" else find_chrome()
+                if p:
+                    return p, bname
+        # 2. 依次探测 Edge 和 Chrome
+        edge = find_edge()
+        if edge:
+            return edge, "edge"
+        chrome = find_chrome()
+        if chrome:
+            return chrome, "chrome"
+        raise RuntimeError("未找到 Microsoft Edge 或 Google Chrome，请安装任一浏览器后重试")
 
 
 def wait_devtools(profile_dir: str, timeout: float = 25.0):
@@ -100,16 +156,17 @@ def _port_alive(ws_url: str) -> bool:
         return False
 
 
-def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
-    """启动托管 Chrome（独立 profile + 随机调试端口），返回 ws 地址。
+def spawn_browser(url: str = None, browser_type: str = "auto", profile_dir: str = None):
+    """启动托管浏览器（Edge 或 Chrome，独立 profile + 随机调试端口），返回 ws 地址。
 
     - 若该 profile 已有实例在跑（端口确实监听中），直接复用（登录态保留）
     - 残留端口文件但实例已死：清除后重新拉起
-    - 不影响用户日常 Chrome
+    - 不影响用户日常浏览器
     """
-    chrome = find_chrome()
-    if not chrome:
-        raise RuntimeError("未找到 Chrome，请先安装")
+    exe, actual_type = find_browser(browser_type)
+    if not profile_dir:
+        profile_dir = MANAGED_EDGE_PROFILE if actual_type == "edge" else MANAGED_CHROME_PROFILE
+
     os.makedirs(profile_dir, exist_ok=True)
     port_file = os.path.join(profile_dir, "DevToolsActivePort")
     ws_url = wait_devtools(profile_dir, timeout=3)
@@ -120,18 +177,24 @@ def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
             os.remove(port_file)
         except OSError:
             pass
-    cmd = [chrome,
+    cmd = [exe,
            f"--user-data-dir={profile_dir}",
            "--remote-debugging-port=0",   # 随机端口，写进 DevToolsActivePort
            "--no-first-run",
            "--no-default-browser-check",
            "--restore-last-session=false"]
+    if actual_type == "edge":
+        cmd.extend([
+            "--disable-features=msFirstRunExperience",
+            "--no-first-run",
+        ])
     if url:
         cmd.append(url)
     subprocess.Popen(cmd)
+    b_title = "Microsoft Edge" if actual_type == "edge" else "Google Chrome"
     ws_url = wait_devtools(profile_dir, timeout=30)
     if not ws_url:
-        raise RuntimeError("Chrome 启动超时（30s）")
+        raise RuntimeError(f"{b_title} 启动超时（30s）")
     # 确认调试端口已可连接：刚启动时端口文件先于监听就绪，
     # 直接返回会让上层首次 websocket 连接撞上竞态窗口。
     deadline = time.time() + 10
@@ -142,52 +205,34 @@ def spawn_chrome(url: str = None, profile_dir: str = MANAGED_PROFILE):
             return ws_url
         except Exception:
             time.sleep(0.5)
-    raise RuntimeError("Chrome 已启动但调试端口暂不可达")
-    return ws_url
+    raise RuntimeError(f"{b_title} 已启动但调试端口暂不可达")
 
 
-def get_cdp_ws_url() -> str:
-    """返回 Chrome 的 browser WebSocket 端点。
+def spawn_chrome(url: str = None, profile_dir: str = None):
+    """向后兼容接口：启动托管 Chrome。"""
+    return spawn_browser(url=url, browser_type="chrome", profile_dir=profile_dir or MANAGED_CHROME_PROFILE)
 
-    优先读 DevToolsActivePort 文件（HTTP 发现端点可能不可用，文件方式更可靠）；
-    找不到文件时回退 HTTP /json/version。
+
+def spawn_edge(url: str = None, profile_dir: str = None):
+    """启动托管 Edge。"""
+    return spawn_browser(url=url, browser_type="edge", profile_dir=profile_dir or MANAGED_EDGE_PROFILE)
+
+
+def get_managed_cdp_ws_url(browser_type: str = "auto") -> str:
+    """定位当前实际在跑的托管浏览器调试端点。
+
+    顺序：根据所选浏览器检查托管 profile 与默认 profile，再回退标准 9222 端口。
     """
-    try:
-        with open(CDP_PORT_FILE, "r", encoding="utf-8") as f:
-            lines = [l.strip() for l in f if l.strip()]
-        port, ws_path = lines[0], lines[1]
-        return f"ws://{DEBUG_HOST}:{port}{ws_path}"
-    except Exception:
-        pass
-    # fallback: 标准发现端点
-    url = f"http://{DEBUG_HOST}:{DEBUG_PORT}/json/version"
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 防止代理劫持 127.0.0.1
-    try:
-        with opener.open(url, timeout=3) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        ws = data.get("webSocketDebuggerUrl")
-        if not ws:
-            raise RuntimeError("9222 有响应但不是 DevTools 端点（可能被别的程序占用）")
-        return ws
-    except Exception as e:
-        raise RuntimeError(
-            f"Chrome DevTools 连不上 ({e})。\n"
-            "检查 DevToolsActivePort 文件是否存在，或 Chrome 是否带"
-            " --remote-debugging-port=9222 启动（需完全退出后重开）"
-        ) from e
+    b = (browser_type or "auto").lower()
+    if "edge" in b:
+        candidates = [MANAGED_EDGE_PROFILE, EDGE_CDP_PORT_FILE]
+    elif "chrome" in b:
+        candidates = [MANAGED_CHROME_PROFILE, CHROME_CDP_PORT_FILE]
+    else:
+        candidates = [MANAGED_EDGE_PROFILE, MANAGED_CHROME_PROFILE, EDGE_CDP_PORT_FILE, CHROME_CDP_PORT_FILE]
 
-
-def get_managed_cdp_ws_url() -> str:
-    """定位当前实际在跑的托管 Chrome 调试端点。
-
-    顺序：1) 托管 profile（jwglxt-auto/chrome-profile）的 DevToolsActivePort
-         2) 默认 Chrome profile 的 DevToolsActivePort
-         3) 9222 标准发现端点
-    托管 Chrome 用独立 profile，get_cdp_ws_url() 只查默认 profile 会永远
-    找不到托管实例（verify 报 10061 的根因）。
-    """
-    candidates = [MANAGED_PROFILE, CDP_PORT_FILE]
-    for port_file in candidates:
+    for item in candidates:
+        port_file = os.path.join(item, "DevToolsActivePort") if not item.endswith("DevToolsActivePort") else item
         try:
             with open(port_file, "r", encoding="utf-8") as f:
                 lines = [l.strip() for l in f if l.strip()]
@@ -208,11 +253,28 @@ def get_managed_cdp_ws_url() -> str:
             raise RuntimeError("9222 有响应但不是 DevTools 端点（可能被别的程序占用）")
         return ws
     except Exception as e:
+        b_label = "Edge" if "edge" in b else ("Chrome" if "chrome" in b else "浏览器")
         raise RuntimeError(
-            f"Chrome DevTools 连不上 ({e})。\n"
-            "托管 Chrome 未在运行，或调试端口不可达。请先点「连接教务」"
-            "（会自动拉起托管 Chrome）再验证。"
+            f"{b_label} DevTools 连不上 ({e})。\n"
+            "托管浏览器未在运行，或调试端口不可达。请先点「连接教务」"
+            "（会自动拉起托管浏览器）再验证。"
         ) from e
+
+
+def get_cdp_ws_url(browser_type: str = "auto") -> str:
+    """返回浏览器的 WebSocket 端点。"""
+    try:
+        return get_managed_cdp_ws_url(browser_type)
+    except Exception:
+        # fallback: 读取 Chrome 默认端点
+        try:
+            with open(CDP_PORT_FILE, "r", encoding="utf-8") as f:
+                lines = [l.strip() for l in f if l.strip()]
+            port, ws_path = lines[0], lines[1]
+            return f"ws://{DEBUG_HOST}:{port}{ws_path}"
+        except Exception:
+            pass
+        raise
 
 
 
