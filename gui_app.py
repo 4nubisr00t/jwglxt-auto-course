@@ -31,7 +31,7 @@ except Exception:
     tk = None
 
 # ---------------- 路径配置 ----------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 ASSET_BG = os.path.join(BASE_DIR, "assets", "bg_main.jpg")
 ASSET_LOGO = os.path.join(BASE_DIR, "assets", "logo.png")
 ASSET_ICON = os.path.join(BASE_DIR, "assets", "icon.ico")
